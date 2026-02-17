@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import NotificationIcon from '../assets/icons/NotificationIcon.svg';
+import TruckIcon from '../assets/icons/TruckIcon.svg';
 
 const HOS_WARN = 480;
 const HOS_BLOCK = 540;
@@ -735,7 +736,9 @@ function HomeScreen({ navigation }) {
 
         {!assignment ? (
           <View style={[styles.card, styles.emptyAssignmentCard]}>
-            <View style={styles.truckIconBox}><Text style={styles.truckIconText}>TRK</Text></View>
+            <View style={styles.truckIconBox}>
+              <TruckIcon width={32} height={32} color="#9CA3AF" />
+            </View>
             <Text style={styles.emptyTitle}>No Active Assignment</Text>
             <Text style={styles.secondaryText}>Waiting for owner dispatch</Text>
           </View>
@@ -941,7 +944,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 14,
   },
-  truckIconText: { color: '#9CA3AF', fontSize: 16, fontWeight: '700' },
   emptyTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
 
   assignmentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

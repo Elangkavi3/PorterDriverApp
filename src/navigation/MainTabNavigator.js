@@ -1,5 +1,5 @@
 ﻿import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import HomeScreen from '../screens/HomeScreen';
@@ -26,6 +26,10 @@ import PerformanceScreen from '../screens/PerformanceScreen';
 import DocumentsScreen from '../screens/DocumentsScreen';
 import DocumentUploadScreen from '../screens/DocumentUploadScreen';
 import BankDetailsScreen from '../screens/BankDetailsScreen';
+import HomeIcon from '../assets/icons/HomeIcon.svg';
+import CartIcon from '../assets/icons/CartIcon.svg';
+import WalletIcon from '../assets/icons/WalletIcon.svg';
+import DashboardIcon from '../assets/icons/DashboardIcon.svg';
 
 const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
@@ -33,19 +37,23 @@ const JobsStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
 const WalletStack = createNativeStackNavigator();
 
-function TabDotIcon({ focused }) {
-  return (
-    <View
-      style={[
-        styles.tabIcon,
-        focused ? styles.tabIconActive : styles.tabIconInactive,
-      ]}
-    />
-  );
-}
+const TAB_ICONS = {
+  Home: HomeIcon,
+  Jobs: CartIcon,
+  Wallet: WalletIcon,
+  Profile: DashboardIcon,
+};
 
-function renderTabIcon({ focused }) {
-  return <TabDotIcon focused={focused} />;
+function renderTabIcon(routeName) {
+  return ({ color, size }) => {
+    const Icon = TAB_ICONS[routeName];
+    if (!Icon) {
+      return null;
+    }
+
+    const iconSize = size && size > 0 ? size : 22;
+    return <Icon width={iconSize} height={iconSize} color={color} />;
+  };
 }
 
 function HomeStackNavigator() {
@@ -124,28 +132,28 @@ function MainTabNavigator() {
         name="Home"
         component={HomeStackNavigator}
         options={{
-          tabBarIcon: renderTabIcon,
+          tabBarIcon: renderTabIcon('Home'),
         }}
       />
       <Tab.Screen
         name="Jobs"
         component={JobsStackNavigator}
         options={{
-          tabBarIcon: renderTabIcon,
+          tabBarIcon: renderTabIcon('Jobs'),
         }}
       />
       <Tab.Screen
         name="Wallet"
         component={WalletStackNavigator}
         options={{
-          tabBarIcon: renderTabIcon,
+          tabBarIcon: renderTabIcon('Wallet'),
         }}
       />
       <Tab.Screen
         name="Profile"
         component={ProfileStackNavigator}
         options={{
-          tabBarIcon: renderTabIcon,
+          tabBarIcon: renderTabIcon('Profile'),
         }}
       />
     </Tab.Navigator>
@@ -163,17 +171,6 @@ const styles = StyleSheet.create({
   tabLabel: {
     fontSize: 12,
     fontWeight: '600',
-  },
-  tabIcon: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  tabIconActive: {
-    backgroundColor: '#2563EB',
-  },
-  tabIconInactive: {
-    backgroundColor: '#6B7280',
   },
 });
 

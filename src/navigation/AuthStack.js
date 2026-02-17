@@ -11,9 +11,11 @@ import DailyHealthDeclarationScreen from '../screens/auth/DailyHealthDeclaration
 
 const Stack = createNativeStackNavigator();
 
-function AuthStack() {
+function AuthStack({ route }) {
+  const initialScreen = route?.params?.initialScreen === 'AadhaarKYC' ? 'AadhaarKYC' : 'Welcome';
+
   return (
-    <Stack.Navigator initialRouteName="Welcome" screenOptions={{ headerShown: false }}>
+    <Stack.Navigator initialRouteName={initialScreen} screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Welcome" component={WelcomeScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="OTP" component={OTPScreen} />
