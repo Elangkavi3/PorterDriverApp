@@ -1,14 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import AppScreen from '../components/ui/AppScreen';
+import AppCard from '../components/ui/AppCard';
+import AppHeader from '../components/ui/AppHeader';
+import AppBadge from '../components/ui/AppBadge';
+import AppButton from '../components/ui/AppButton';
+import { useAppTheme } from '../theme/ThemeProvider';
 
 const STORAGE_KEY = 'jobsList';
 
@@ -33,7 +31,7 @@ function normalizeJob(job) {
     earnings: typeof job?.earnings === 'number' ? job.earnings : 0,
     distance: job?.distance || '0 km',
     eta: job?.eta || '0h 00m',
-    cancellationReason: job?.cancellationReason || '',
+    paymentStatus: String(job?.paymentStatus || '').toUpperCase() === 'PAID' ? 'PAID' : 'UNPAID',
   };
 }
 
@@ -45,6 +43,7 @@ function formatEarnings(value) {
 }
 
 function CompletedJobScreen({ navigation, route }) {
+  const { colors, spacing, typography } = useAppTheme();
   const [job, setJob] = useState(route?.params?.job ? normalizeJob(route.params.job) : null);
   const [isLoading, setIsLoading] = useState(!route?.params?.job);
 
@@ -83,177 +82,64 @@ function CompletedJobScreen({ navigation, route }) {
     };
   }, [route?.params?.job, route?.params?.jobId]);
 
-  return (
-    <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.screenTitle}>Completed Job</Text>
+  const timeline = useMemo(() => {
+    const base = [
+      'Trip assigned',
+      'Pickup confirmed',
+      'In transit',
+      'Delivery confirmed',
+      'Trip completed',
+    ];
+    if (job?.paymentStatus === 'PAID') {
+      base.push('Payment marked by admin');
+    } else {
+      base.push('Payment pending admin settlement');
+    }
+    return base;
+  }, [job?.paymentStatus]);
 
+  return (
+    <AppScreen>
+      <AppHeader title="Trip Summary" subtitle="View-only lifecycle" />
+      <ScrollView contentContainerStyle={{ paddingHorizontal: spacing[2], paddingBottom: spacing[6] }}>
         {isLoading ? (
-          <View style={styles.loaderContainer}>
-            <ActivityIndicator size="large" color="#2563EB" />
+          <View style={{ alignItems: 'center', justifyContent: 'center', minHeight: 260 }}>
+            <ActivityIndicator size="large" color={colors.primary} />
           </View>
         ) : job ? (
-          <View style={styles.card}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Job ID</Text>
-              <Text style={styles.value}>{job.id}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Pickup</Text>
-              <Text style={styles.value}>{job.pickup}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Drop</Text>
-              <Text style={styles.value}>{job.drop}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Total Distance</Text>
-              <Text style={styles.value}>{job.distance}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Duration</Text>
-              <Text style={styles.value}>6h 10m</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Earnings</Text>
-              <Text style={styles.value}>{formatEarnings(job.earnings)}</Text>
-            </View>
-            <View style={styles.expenseBlock}>
-              <Text style={styles.expenseTitle}>Expense Breakdown</Text>
-              <View style={styles.expenseRow}>
-                <Text style={styles.expenseLabel}>Fuel</Text>
-                <Text style={styles.expenseValue}>INR 980</Text>
+          <>
+            <AppCard style={{ marginBottom: spacing[1] }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={[typography.h2, { color: colors.textPrimary }]}>{job.id}</Text>
+                <AppBadge label={job.paymentStatus} />
               </View>
-              <View style={styles.expenseRow}>
-                <Text style={styles.expenseLabel}>Toll</Text>
-                <Text style={styles.expenseValue}>INR 240</Text>
-              </View>
-              <View style={styles.expenseRow}>
-                <Text style={styles.expenseLabel}>Parking</Text>
-                <Text style={styles.expenseValue}>INR 120</Text>
-              </View>
-            </View>
-          </View>
+              <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[1] }]}>Pickup</Text>
+              <Text style={[typography.label, { color: colors.textPrimary }]}>{job.pickup}</Text>
+              <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[1] }]}>Drop</Text>
+              <Text style={[typography.label, { color: colors.textPrimary }]}>{job.drop}</Text>
+              <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[1] }]}>Date</Text>
+              <Text style={[typography.label, { color: colors.textPrimary }]}>{job.date}</Text>
+              <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[1] }]}>Earnings</Text>
+              <Text style={[typography.h2, { color: colors.textPrimary }]}>{formatEarnings(job.earnings)}</Text>
+            </AppCard>
+
+            <AppCard style={{ marginBottom: spacing[1] }}>
+              <Text style={[typography.h2, { color: colors.textPrimary }]}>Status Timeline</Text>
+              {timeline.map(item => (
+                <Text key={item} style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[1] }]}>• {item}</Text>
+              ))}
+            </AppCard>
+          </>
         ) : (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>No Jobs Available</Text>
-          </View>
+          <AppCard>
+            <Text style={[typography.body, { color: colors.textPrimary }]}>No trip found.</Text>
+          </AppCard>
         )}
 
-        <TouchableOpacity
-          activeOpacity={0.9}
-          style={styles.returnButton}
-          onPress={() => navigation.navigate('JobsScreen')}
-        >
-          <Text style={styles.returnButtonText}>Return to Jobs</Text>
-        </TouchableOpacity>
+        <AppButton title="Return to Jobs" onPress={() => navigation.navigate('JobsMain')} style={{ marginTop: spacing[1] }} />
       </ScrollView>
-    </SafeAreaView>
+    </AppScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#111827',
-  },
-  content: {
-    padding: 16,
-  },
-  screenTitle: {
-    color: '#FFFFFF',
-    fontSize: 28,
-    fontWeight: '800',
-    marginBottom: 14,
-  },
-  loaderContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 260,
-  },
-  card: {
-    backgroundColor: '#1F2937',
-    borderColor: '#374151',
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-  },
-  row: {
-    borderBottomColor: '#374151',
-    borderBottomWidth: 1,
-    marginBottom: 12,
-    paddingBottom: 12,
-  },
-  label: {
-    color: '#9CA3AF',
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  value: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  expenseBlock: {
-    backgroundColor: '#111827',
-    borderColor: '#374151',
-    borderRadius: 14,
-    borderWidth: 1,
-    marginTop: 4,
-    padding: 12,
-  },
-  expenseTitle: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-    marginBottom: 10,
-  },
-  expenseRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  expenseLabel: {
-    color: '#9CA3AF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  expenseValue: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  emptyCard: {
-    alignItems: 'center',
-    backgroundColor: '#1F2937',
-    borderColor: '#374151',
-    borderRadius: 16,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 220,
-    padding: 20,
-  },
-  emptyText: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  returnButton: {
-    alignItems: 'center',
-    backgroundColor: '#2563EB',
-    borderRadius: 16,
-    justifyContent: 'center',
-    marginTop: 16,
-    minHeight: 56,
-    paddingHorizontal: 16,
-  },
-  returnButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-});
 
 export default CompletedJobScreen;

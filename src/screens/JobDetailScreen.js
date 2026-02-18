@@ -1,21 +1,35 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import AppScreen from '../components/ui/AppScreen';
+import AppCard from '../components/ui/AppCard';
+import AppBadge from '../components/ui/AppBadge';
+import AppButton from '../components/ui/AppButton';
+import AppHeader from '../components/ui/AppHeader';
+import OperationalSOSButton from '../components/ui/OperationalSOSButton';
+import { useAppTheme } from '../theme/ThemeProvider';
+import { useLanguage } from '../i18n/LanguageProvider';
+import { VEHICLE_STATUS, getVehicleStatusLabel, getVehicleStatusTone, normalizeVehicleStatus } from '../services/vehicleStatus';
+import { summarizeRequiredDocuments } from '../services/documentVerification';
 
 const STORAGE_KEYS = {
   jobsList: 'jobsList',
   activeTrip: 'activeTrip',
   tripState: 'tripState',
+  vehicleSafetyStatus: 'vehicleSafetyStatus',
+  vehicleInspectionDate: 'vehicleInspectionDate',
+  driverDocuments: 'driverDocuments',
+  profile: 'driverProfile',
 };
+
+function todayStamp() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = `${now.getMonth() + 1}`.padStart(2, '0');
+  const d = `${now.getDate()}`.padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 
 function parseStoredJson(value, fallback) {
   if (!value) {
@@ -63,33 +77,57 @@ function stringifyTripState(value) {
 }
 
 function JobDetailScreen({ navigation, route }) {
+  const { colors, spacing, typography } = useAppTheme();
+  const { t } = useLanguage();
   const [job, setJob] = useState(route?.params?.job ? normalizeJob(route.params.job) : null);
   const [tripState, setTripState] = useState('ASSIGNED');
+  const [vehicleStatus, setVehicleStatus] = useState(VEHICLE_STATUS.INSPECTION_PENDING);
+  const [isInspectionCompletedToday, setIsInspectionCompletedToday] = useState(false);
+  const [vehicleNumber, setVehicleNumber] = useState('TN-01-AB-1048');
+  const [showDocumentWarning, setShowDocumentWarning] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const routeJobId = route?.params?.jobId;
 
   const loadData = useCallback(async () => {
     try {
-      const jobsRaw = await AsyncStorage.getItem(STORAGE_KEYS.jobsList);
-      const jobs = parseStoredJson(jobsRaw, []);
+      const rows = await AsyncStorage.multiGet([
+        STORAGE_KEYS.jobsList,
+        STORAGE_KEYS.tripState,
+        STORAGE_KEYS.vehicleSafetyStatus,
+        STORAGE_KEYS.vehicleInspectionDate,
+        STORAGE_KEYS.profile,
+      ]);
+      const data = Object.fromEntries(rows);
+
+      const jobs = parseStoredJson(data[STORAGE_KEYS.jobsList], []);
       const jobsList = Array.isArray(jobs) ? jobs.map(normalizeJob) : [];
 
       const targetJob =
         jobsList.find(item => item.id === routeJobId) ||
         (route?.params?.job ? normalizeJob(route.params.job) : null) ||
-        jobsList.find(item => item.status === 'ACTIVE') ||
+        jobsList.find(item => item.status === 'ACTIVE' || item.status === 'ASSIGNED') ||
         jobsList[0] ||
         null;
 
       setJob(targetJob);
 
-      const tripStateRaw = await AsyncStorage.getItem(STORAGE_KEYS.tripState);
-      const parsedTripState = parseStoredJson(tripStateRaw, tripStateRaw);
+      const parsedTripState = parseStoredJson(data[STORAGE_KEYS.tripState], data[STORAGE_KEYS.tripState]);
       setTripState(stringifyTripState(parsedTripState));
+
+      setVehicleStatus(normalizeVehicleStatus(data[STORAGE_KEYS.vehicleSafetyStatus]));
+      setIsInspectionCompletedToday(data[STORAGE_KEYS.vehicleInspectionDate] === todayStamp());
+      setShowDocumentWarning(false);
+
+      const profile = parseStoredJson(data[STORAGE_KEYS.profile], {});
+      setVehicleNumber(String(profile?.vehicleNumber || 'TN-01-AB-1048'));
     } catch (_error) {
       setJob(route?.params?.job ? normalizeJob(route.params.job) : null);
       setTripState('ASSIGNED');
+      setVehicleStatus(VEHICLE_STATUS.INSPECTION_PENDING);
+      setIsInspectionCompletedToday(false);
+      setVehicleNumber('TN-01-AB-1048');
+      setShowDocumentWarning(false);
     } finally {
       setIsLoading(false);
     }
@@ -101,23 +139,36 @@ function JobDetailScreen({ navigation, route }) {
     }, [loadData]),
   );
 
-  const canContinue = useMemo(() => job && job.status === 'ACTIVE', [job]);
+  const isVehicleUnsafe = vehicleStatus === VEHICLE_STATUS.NOT_ROADWORTHY;
+  const canStartTrip = useMemo(
+    () => job && (job.status === 'ACTIVE' || job.status === 'ASSIGNED') && isInspectionCompletedToday && vehicleStatus === VEHICLE_STATUS.ROAD_READY,
+    [isInspectionCompletedToday, job, vehicleStatus],
+  );
 
   const navigateToActiveTrip = useCallback(() => {
-    const routeNames = navigation.getState()?.routeNames || [];
-    if (routeNames.includes('ActiveTripScreen')) {
-      navigation.navigate('ActiveTripScreen');
-      return;
-    }
     navigation.navigate('ActiveTrip');
   }, [navigation]);
 
-  const handleContinueTrip = useCallback(async () => {
-    if (!canContinue || !job) {
+  const openDocumentVerification = useCallback(() => {
+    navigation.getParent()?.navigate('Profile', {
+      screen: 'ProfileMain',
+      params: { focusSection: 'documents' },
+    });
+  }, [navigation]);
+
+  const handleStartTrip = useCallback(async () => {
+    if (!canStartTrip || !job) {
       return;
     }
 
     try {
+      const docRows = await AsyncStorage.getItem(STORAGE_KEYS.driverDocuments);
+      const docSummary = summarizeRequiredDocuments(parseStoredJson(docRows, []));
+      if (docSummary.hasBlocking) {
+        setShowDocumentWarning(true);
+        return;
+      }
+
       const activeTripRaw = await AsyncStorage.getItem(STORAGE_KEYS.activeTrip);
       const activeTrip = parseStoredJson(activeTripRaw, null);
 
@@ -126,173 +177,118 @@ function JobDetailScreen({ navigation, route }) {
         await AsyncStorage.setItem(STORAGE_KEYS.activeTrip, JSON.stringify(tripPayload));
       }
 
-      await AsyncStorage.setItem(STORAGE_KEYS.tripState, 'EN_ROUTE');
-      setTripState('EN_ROUTE');
+      await AsyncStorage.setItem(STORAGE_KEYS.tripState, 'EN_ROUTE_PICKUP');
+      setTripState('EN_ROUTE_PICKUP');
       navigateToActiveTrip();
     } catch (_error) {
-      navigateToActiveTrip();
+      Alert.alert(t('trip.unableToStartTitle'), t('trip.unableToStartMessage'));
     }
-  }, [canContinue, job, navigateToActiveTrip]);
+  }, [canStartTrip, job, navigateToActiveTrip, t]);
 
   if (isLoading) {
     return (
-      <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
-        <View style={styles.loaderContainer}>
-          <ActivityIndicator size="large" color="#2563EB" />
+      <AppScreen edges={['top', 'bottom']}>
+        <View style={{ alignItems: 'center', flex: 1, justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
-      </SafeAreaView>
+      </AppScreen>
     );
   }
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.screenTitle}>Job Details</Text>
-
+    <AppScreen edges={['top', 'bottom']}>
+      <AppHeader title={t('trip.detailsTitle')} subtitle={t('trip.detailsSubtitle')} />
+      <ScrollView contentContainerStyle={{ paddingHorizontal: spacing[2], paddingBottom: spacing[6] }}>
         {job ? (
-          <View style={styles.card}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Job ID</Text>
-              <Text style={styles.value}>{job.id}</Text>
+          <AppCard>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={[typography.h2, { color: colors.textPrimary }]}>{job.id}</Text>
+              <AppBadge label={tripState} />
             </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Pickup</Text>
-              <Text style={styles.value}>{job.pickup}</Text>
+
+            <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[2] }]}>{t('trip.assignedVehicle')}</Text>
+            <Text style={[typography.label, { color: colors.textPrimary }]}>{vehicleNumber}</Text>
+            <View style={{ marginTop: spacing[1] }}>
+              <AppBadge label={getVehicleStatusLabel(vehicleStatus)} tone={getVehicleStatusTone(vehicleStatus)} />
             </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Drop</Text>
-              <Text style={styles.value}>{job.drop}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Distance</Text>
-              <Text style={styles.value}>{job.distance}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>ETA</Text>
-              <Text style={styles.value}>{job.eta}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Earnings</Text>
-              <Text style={styles.value}>{formatEarnings(job.earnings)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Lifecycle Status</Text>
-              <View style={styles.lifecycleBadge}>
-                <Text style={styles.lifecycleText}>{tripState}</Text>
+
+            <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[2] }]}>{t('dashboard.pickup')}</Text>
+            <Text style={[typography.label, { color: colors.textPrimary }]}>{job.pickup}</Text>
+            <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[1] }]}>{t('dashboard.drop')}</Text>
+            <Text style={[typography.label, { color: colors.textPrimary }]}>{job.drop}</Text>
+
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing[2] }}>
+              <View>
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>{t('trip.distance')}</Text>
+                <Text style={[typography.label, { color: colors.textPrimary }]}>{job.distance}</Text>
+              </View>
+              <View>
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>{t('trip.eta')}</Text>
+                <Text style={[typography.label, { color: colors.textPrimary }]}>{job.eta}</Text>
               </View>
             </View>
-          </View>
+
+            <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[2] }]}>{t('trip.payout')}</Text>
+            <Text style={[typography.h2, { color: colors.textPrimary }]}>{formatEarnings(job.earnings)}</Text>
+          </AppCard>
         ) : (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>No Jobs Available</Text>
-          </View>
+          <AppCard>
+            <Text style={[typography.body, { color: colors.textPrimary }]}>{t('trip.noJobs')}</Text>
+          </AppCard>
         )}
 
-        <TouchableOpacity
-          activeOpacity={0.9}
-          disabled={!canContinue}
-          style={[styles.continueButton, !canContinue ? styles.continueButtonDisabled : null]}
-          onPress={handleContinueTrip}
-        >
-          <Text style={styles.continueButtonText}>Continue Trip</Text>
-        </TouchableOpacity>
+        {isVehicleUnsafe ? (
+          <View
+            style={{
+              marginTop: spacing[2],
+              borderRadius: 16,
+              backgroundColor: colors.critical,
+              paddingHorizontal: spacing[2],
+              paddingVertical: spacing[1],
+            }}
+          >
+            <Text style={[typography.label, { color: colors.textOnColor }]}>{t('dashboard.vehicleUnsafe')}</Text>
+          </View>
+        ) : (
+          <>
+            <AppButton
+              title={t('dashboard.startTrip')}
+              onPress={handleStartTrip}
+              disabled={!canStartTrip}
+              style={{ marginTop: spacing[2] }}
+            />
+            {!isInspectionCompletedToday || vehicleStatus !== VEHICLE_STATUS.ROAD_READY ? (
+              <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('VehicleInspection', { vehicleNumber })}>
+                <Text style={[typography.caption, { color: colors.warning, marginTop: spacing[1] }]}>{t('trip.completeInspectionWarning')}</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {showDocumentWarning ? (
+              <View
+                style={{
+                  marginTop: spacing[2],
+                  borderRadius: 16,
+                  backgroundColor: colors.warning,
+                  paddingHorizontal: spacing[2],
+                  paddingVertical: spacing[1],
+                }}
+              >
+                <Text style={[typography.label, { color: colors.textOnColor }]}>
+                  {t('trip.requiredDocumentsWarning')}
+                </Text>
+                <AppButton
+                  title={t('common.uploadDocuments')}
+                  onPress={openDocumentVerification}
+                  style={{ marginTop: spacing[1] }}
+                />
+              </View>
+            ) : null}
+          </>
+        )}
       </ScrollView>
-    </SafeAreaView>
+      <OperationalSOSButton onPress={() => navigation.navigate('SOSFullScreen')} />
+    </AppScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#111827',
-  },
-  loaderContainer: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-  },
-  content: {
-    padding: 16,
-  },
-  screenTitle: {
-    color: '#FFFFFF',
-    fontSize: 28,
-    fontWeight: '800',
-    marginBottom: 14,
-  },
-  card: {
-    backgroundColor: '#1F2937',
-    borderColor: '#374151',
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-  },
-  row: {
-    borderBottomColor: '#374151',
-    borderBottomWidth: 1,
-    marginBottom: 12,
-    paddingBottom: 12,
-  },
-  label: {
-    color: '#9CA3AF',
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  value: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  lifecycleBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#2563EB',
-    borderRadius: 999,
-    marginTop: 4,
-    minHeight: 30,
-    minWidth: 130,
-    paddingHorizontal: 12,
-    justifyContent: 'center',
-  },
-  lifecycleText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  emptyCard: {
-    alignItems: 'center',
-    backgroundColor: '#1F2937',
-    borderColor: '#374151',
-    borderRadius: 16,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 220,
-    padding: 20,
-  },
-  emptyText: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  continueButton: {
-    alignItems: 'center',
-    backgroundColor: '#2563EB',
-    borderRadius: 16,
-    justifyContent: 'center',
-    marginTop: 16,
-    minHeight: 56,
-    paddingHorizontal: 16,
-  },
-  continueButtonDisabled: {
-    backgroundColor: '#374151',
-  },
-  continueButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-});
 
 export default JobDetailScreen;

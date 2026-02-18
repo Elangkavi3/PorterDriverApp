@@ -55,6 +55,25 @@ function formatAmount(amount) {
   return `INR ${amount.toLocaleString('en-IN')}`;
 }
 
+function maskAccountNumber(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!digits) {
+    return 'Not Available';
+  }
+  return `XXXX${digits.slice(-4)}`;
+}
+
+function maskIfscCode(value) {
+  const clean = String(value || '').trim().toUpperCase();
+  if (!clean) {
+    return 'Not Available';
+  }
+  if (clean.length <= 4) {
+    return `${clean}****`;
+  }
+  return `${clean.slice(0, 4)}****`;
+}
+
 function WithdrawScreen({ navigation }) {
   const [walletBalance, setWalletBalance] = useState(0);
   const [transactions, setTransactions] = useState([]);
@@ -170,9 +189,9 @@ function WithdrawScreen({ navigation }) {
               <Text style={styles.bankPrimary}>{bankDetails.accountHolderName || 'Account Holder'}</Text>
               <Text style={styles.bankSecondary}>{bankDetails.bankName || 'Bank Name'}</Text>
               <Text style={styles.bankSecondary}>
-                Account: {bankDetails.accountNumber || 'Not Available'}
+                Account: {maskAccountNumber(bankDetails.accountNumber)}
               </Text>
-              <Text style={styles.bankSecondary}>IFSC: {bankDetails.ifscCode || 'Not Available'}</Text>
+              <Text style={styles.bankSecondary}>IFSC: {maskIfscCode(bankDetails.ifscCode)}</Text>
             </View>
           ) : (
             <Text style={styles.bankSecondary}>No bank details saved. Add details in Profile.</Text>

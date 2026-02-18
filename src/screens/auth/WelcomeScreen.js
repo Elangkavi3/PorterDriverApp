@@ -6,20 +6,23 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLanguage } from '../../i18n/LanguageProvider';
 
 function WelcomeScreen({ navigation }) {
+  const { t } = useLanguage();
+
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
       <View style={styles.container}>
-        <Text style={styles.title}>Porter Driver App</Text>
-        <Text style={styles.subtitle}>Sign in to continue</Text>
+        <Text style={styles.title}>{t('auth.welcomeTitle')}</Text>
+        <Text style={styles.subtitle}>{t('auth.welcomeSubtitle')}</Text>
 
         <TouchableOpacity
           style={styles.primaryButton}
           activeOpacity={0.9}
           onPress={() => navigation.navigate('Login')}
         >
-          <Text style={styles.primaryButtonText}>Continue</Text>
+          <Text style={styles.primaryButtonText}>{t('common.continue')}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

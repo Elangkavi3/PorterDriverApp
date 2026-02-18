@@ -1,33 +1,20 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import ExpenseModal from '../components/ExpenseModal';
 import OTPModal from '../components/OTPModal';
 import TripProgressBar from '../components/TripProgressBar';
-import CancelIcon from '../components/icons/CancelIcon';
-import ClockIcon from '../components/icons/ClockIcon';
-import FuelIcon from '../components/icons/FuelIcon';
-import LocationIcon from '../components/icons/LocationIcon';
-import MapPinIcon from '../components/icons/MapPinIcon';
-import SOSIcon from '../components/icons/SOSIcon';
-import SuccessIcon from '../components/icons/SuccessIcon';
-import TollIcon from '../components/icons/TollIcon';
-import TruckIcon from '../components/icons/TruckIcon';
-import WarningIcon from '../components/icons/WarningIcon';
+import AppScreen from '../components/ui/AppScreen';
+import AppCard from '../components/ui/AppCard';
+import AppBadge from '../components/ui/AppBadge';
+import AppButton from '../components/ui/AppButton';
+import AppHeader from '../components/ui/AppHeader';
+import OperationalSOSButton from '../components/ui/OperationalSOSButton';
+import { useAppTheme } from '../theme/ThemeProvider';
+import { useOperations } from '../runtime/OperationsProvider';
 
 const STORAGE_KEYS = {
-  walletBalance: 'walletBalance',
-  walletTransactions: 'walletTransactions',
   activeTrip: 'activeTrip',
   tripState: 'tripState',
   jobsList: 'jobsList',
@@ -44,7 +31,8 @@ const STATE_ACTIONS = {
   PICKUP_CONFIRMED: { label: 'Start Transit', nextState: 'IN_TRANSIT' },
   IN_TRANSIT: { label: 'Mark Arrived Drop', nextState: 'ARRIVED_DROP' },
   ARRIVED_DROP: { label: 'Verify Delivery OTP', otpMode: 'DELIVERY' },
-  DELIVERY_CONFIRMED: { label: 'Complete Trip', complete: true },
+  DELIVERY_CONFIRMED: { label: 'Upload POD', podUpload: true, nextState: 'POD_UPLOADED' },
+  POD_UPLOADED: { label: 'Complete Trip', complete: true },
 };
 
 const HOS_WARN_MINUTES = 480;
@@ -62,11 +50,7 @@ function parseStoredJson(value, fallback) {
 }
 
 function normalizeTrip(trip) {
-  if (!trip || typeof trip !== 'object') {
-    return null;
-  }
-
-  if (!trip.id || !trip.pickup || !trip.drop) {
+  if (!trip || typeof trip !== 'object' || !trip.id || !trip.pickup || !trip.drop) {
     return null;
   }
 
@@ -80,19 +64,6 @@ function normalizeTrip(trip) {
     distance: String(trip.distance || '0 km'),
     eta: String(trip.eta || '0h 00m'),
     cancellationReason: String(trip.cancellationReason || ''),
-  };
-}
-
-function normalizeTransaction(transaction) {
-  return {
-    id: transaction?.id || `TXN-${Date.now()}`,
-    type: transaction?.type === 'DEBIT' ? 'DEBIT' : 'CREDIT',
-    source: transaction?.source || 'Trip',
-    amount: typeof transaction?.amount === 'number' ? transaction.amount : 0,
-    status: ['SUCCESS', 'PENDING', 'FAILED'].includes(transaction?.status)
-      ? transaction.status
-      : 'PENDING',
-    date: transaction?.date || '2024-02-14',
   };
 }
 
@@ -118,13 +89,6 @@ function getDateStamp() {
 function formatAmount(amount) {
   const safeAmount = Number.isFinite(amount) ? amount : 0;
   return `INR ${safeAmount.toLocaleString('en-IN')}`;
-}
-
-function formatDrivingTime(minutes) {
-  const safeMinutes = minutes > 0 ? minutes : 0;
-  const hours = Math.floor(safeMinutes / 60);
-  const mins = safeMinutes % 60;
-  return `${hours}h ${String(mins).padStart(2, '0')}m`;
 }
 
 function summarizeExpenses(expenses, tripId) {
@@ -158,10 +122,16 @@ function summarizeExpenses(expenses, tripId) {
 }
 
 function ActiveTripScreen({ navigation, route }) {
+  const { colors, spacing, typography } = useAppTheme();
+  const {
+    isOffline,
+    pendingActions,
+    queueOperationalAction,
+  } = useOperations();
+
   const [isLoading, setIsLoading] = useState(true);
   const [trip, setTrip] = useState(normalizeTrip(route?.params?.trip || route?.params?.job));
   const [tripState, setTripState] = useState('ASSIGNED');
-  const [isOffline, setIsOffline] = useState(false);
   const [isGpsDisabled, setIsGpsDisabled] = useState(false);
   const [drivingMinutes, setDrivingMinutes] = useState(0);
   const [isCancelledByOwner, setIsCancelledByOwner] = useState(false);
@@ -202,11 +172,8 @@ function ActiveTripScreen({ navigation, route }) {
 
       setTrip(nextTrip);
       setTripState(nextIsCancelled ? 'CANCELLED' : parsedState || 'ASSIGNED');
-      setIsOffline(Boolean(homeState?.isOffline));
       setIsGpsDisabled(Boolean(homeState?.isGpsDisabled));
-      setDrivingMinutes(
-        typeof homeState?.drivingMinutes === 'number' ? homeState.drivingMinutes : 0,
-      );
+      setDrivingMinutes(typeof homeState?.drivingMinutes === 'number' ? homeState.drivingMinutes : 0);
       setIsCancelledByOwner(nextIsCancelled);
       setExpenses(expenseSummary);
 
@@ -220,7 +187,6 @@ function ActiveTripScreen({ navigation, route }) {
       const fallbackTrip = normalizeTrip(route?.params?.trip || route?.params?.job);
       setTrip(fallbackTrip);
       setTripState('ASSIGNED');
-      setIsOffline(false);
       setIsGpsDisabled(false);
       setDrivingMinutes(0);
       setIsCancelledByOwner(false);
@@ -248,46 +214,47 @@ function ActiveTripScreen({ navigation, route }) {
     return STATE_ACTIONS[tripState] || STATE_ACTIONS.ASSIGNED;
   }, [isCancelled, isCompleted, tripState]);
 
+  const pendingTripActions = useMemo(() => {
+    if (!trip?.id) {
+      return [];
+    }
+    return pendingActions.filter(item => String(item?.payload?.tripId) === String(trip.id));
+  }, [pendingActions, trip?.id]);
+
+  const canQueueOfflineAction = useMemo(() => {
+    if (!currentAction) {
+      return false;
+    }
+    return (
+      currentAction.nextState === 'ARRIVED_PICKUP' ||
+      currentAction.otpMode === 'DELIVERY' ||
+      Boolean(currentAction.podUpload)
+    );
+  }, [currentAction]);
+
   const bannerItems = useMemo(() => {
     const banners = [];
 
     if (isOffline) {
-      banners.push({
-        id: 'offline',
-        type: 'warning',
-        text: 'No Internet - Trip data is running in cached mode',
-      });
+      banners.push({ id: 'offline', tone: 'warning', text: 'Offline mode active. Trip is read-only with queued actions.' });
+    }
+    if (pendingTripActions.length > 0) {
+      banners.push({ id: 'sync', tone: 'warning', text: `${pendingTripActions.length} action(s) pending sync` });
     }
     if (isGpsDisabled) {
-      banners.push({
-        id: 'gps',
-        type: 'warning',
-        text: 'GPS Disabled - Route tracking signal unavailable',
-      });
+      banners.push({ id: 'gps', tone: 'warning', text: 'GPS disabled. Route tracking unavailable.' });
     }
     if (isHosExceeded) {
-      banners.push({
-        id: 'hos',
-        type: 'warning',
-        text: 'HOS Exceeded - Operational actions restricted',
-      });
+      banners.push({ id: 'hos', tone: 'critical', text: 'HOS exceeded. Operational actions restricted.' });
     } else if (isHosWarning) {
-      banners.push({
-        id: 'hos-warning',
-        type: 'warning',
-        text: 'HOS Warning - Near legal driving threshold',
-      });
+      banners.push({ id: 'hos-warning', tone: 'warning', text: 'HOS warning. Approaching legal threshold.' });
     }
     if (isCancelled) {
-      banners.push({
-        id: 'cancelled',
-        type: 'cancel',
-        text: 'Trip cancelled by owner control room',
-      });
+      banners.push({ id: 'cancelled', tone: 'critical', text: 'Trip cancelled by control room.' });
     }
 
     return banners;
-  }, [isCancelled, isGpsDisabled, isHosExceeded, isHosWarning, isOffline]);
+  }, [isCancelled, isGpsDisabled, isHosExceeded, isHosWarning, isOffline, pendingTripActions.length]);
 
   const persistTripState = useCallback(
     async nextState => {
@@ -331,10 +298,7 @@ function ActiveTripScreen({ navigation, route }) {
         };
         const nextExpenses = [payload, ...list];
 
-        await AsyncStorage.setItem(
-          STORAGE_KEYS.tripExpenses,
-          JSON.stringify(nextExpenses),
-        );
+        await AsyncStorage.setItem(STORAGE_KEYS.tripExpenses, JSON.stringify(nextExpenses));
         setExpenses(summarizeExpenses(nextExpenses, trip.id));
       } catch (_error) {
         Alert.alert('Error', 'Unable to save expense right now.');
@@ -345,22 +309,57 @@ function ActiveTripScreen({ navigation, route }) {
     [trip],
   );
 
-  const handleOTPConfirm = useCallback(
-    async () => {
-      try {
-        if (otpMode === 'PICKUP') {
-          await persistTripState('PICKUP_CONFIRMED');
-        } else {
-          await persistTripState('DELIVERY_CONFIRMED');
-        }
-      } catch (_error) {
-        Alert.alert('Error', 'Unable to validate OTP right now.');
-      } finally {
-        setShowOtpModal(false);
+  const queueForSync = useCallback(async (type, nextState, label) => {
+    if (!trip?.id) {
+      return;
+    }
+
+    await queueOperationalAction(type, {
+      tripId: trip.id,
+      nextState,
+      label,
+      queuedAt: new Date().toISOString(),
+    });
+
+    Alert.alert('Queued', `${label} stored as Pending Sync. It will auto-sync when network is restored.`);
+  }, [queueOperationalAction, trip?.id]);
+
+  const handleOTPConfirm = useCallback(async () => {
+    try {
+      if (isOffline) {
+        const queuedState = otpMode === 'PICKUP' ? 'PICKUP_CONFIRMED' : 'DELIVERY_CONFIRMED';
+        await queueForSync('OTP_VERIFICATION', queuedState, `OTP Verification (${otpMode})`);
+        return;
       }
-    },
-    [otpMode, persistTripState],
-  );
+
+      if (otpMode === 'PICKUP') {
+        await persistTripState('PICKUP_CONFIRMED');
+      } else {
+        await persistTripState('DELIVERY_CONFIRMED');
+      }
+    } catch (_error) {
+      Alert.alert('Error', 'Unable to validate OTP right now.');
+    } finally {
+      setShowOtpModal(false);
+    }
+  }, [isOffline, otpMode, persistTripState, queueForSync]);
+
+  const openDashboard = useCallback(() => {
+    const firstParent = navigation.getParent();
+    const rootParent = firstParent?.getParent();
+
+    if (rootParent && rootParent.getState()?.routeNames?.includes('MainTabs')) {
+      rootParent.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
+      return;
+    }
+
+    if (firstParent && firstParent.getState()?.routeNames?.includes('Home')) {
+      firstParent.navigate('Home');
+      return;
+    }
+
+    navigation.goBack();
+  }, [navigation]);
 
   const handleCompleteTrip = useCallback(async () => {
     if (!trip) {
@@ -368,68 +367,34 @@ function ActiveTripScreen({ navigation, route }) {
     }
 
     try {
-      const data = await AsyncStorage.multiGet([
-        STORAGE_KEYS.walletBalance,
-        STORAGE_KEYS.walletTransactions,
-        STORAGE_KEYS.activeTrip,
-        STORAGE_KEYS.jobsList,
-        STORAGE_KEYS.tripExpenses,
-      ]);
+      const data = await AsyncStorage.multiGet([STORAGE_KEYS.activeTrip, STORAGE_KEYS.jobsList]);
       const dataMap = Object.fromEntries(data);
 
-      const activeTrip = normalizeTrip(
-        parseStoredJson(dataMap[STORAGE_KEYS.activeTrip], trip),
-      );
+      const activeTrip = normalizeTrip(parseStoredJson(dataMap[STORAGE_KEYS.activeTrip], trip));
       if (!activeTrip) {
         throw new Error('Missing active trip');
       }
 
-      const walletBalance = Number(dataMap[STORAGE_KEYS.walletBalance]);
-      const currentBalance = Number.isFinite(walletBalance) ? walletBalance : 0;
-
-      const parsedTransactions = parseStoredJson(
-        dataMap[STORAGE_KEYS.walletTransactions],
-        [],
-      );
-      const transactions = Array.isArray(parsedTransactions)
-        ? parsedTransactions.map(normalizeTransaction)
-        : [];
-
-      const tripSource = `Trip ${activeTrip.id}`;
-      const alreadyCredited = transactions.some(
-        transaction =>
-          transaction.type === 'CREDIT' &&
-          transaction.source === tripSource &&
-          transaction.status === 'SUCCESS',
-      );
-
       const updates = [];
-
-      if (!alreadyCredited) {
-        const creditTransaction = {
-          id: `TXN-${Date.now()}`,
-          type: 'CREDIT',
-          source: tripSource,
-          amount: activeTrip.earnings,
-          status: 'SUCCESS',
-          date: getDateStamp(),
-        };
-
-        const nextTransactions = [creditTransaction, ...transactions];
-        const nextBalance = currentBalance + activeTrip.earnings;
-
-        updates.push([
-          STORAGE_KEYS.walletTransactions,
-          JSON.stringify(nextTransactions),
-        ]);
-        updates.push([STORAGE_KEYS.walletBalance, String(nextBalance)]);
-      }
 
       const parsedJobs = parseStoredJson(dataMap[STORAGE_KEYS.jobsList], []);
       if (Array.isArray(parsedJobs)) {
-        const nextJobs = parsedJobs.map(job =>
-          job?.id === activeTrip.id ? { ...job, status: 'COMPLETED' } : job,
+        const updatedJobs = parsedJobs.map(job =>
+          job?.id === activeTrip.id
+            ? { ...job, status: 'COMPLETED', paymentStatus: 'UNPAID' }
+            : job,
         );
+        const hasJob = updatedJobs.some(job => job?.id === activeTrip.id);
+        const nextJobs = hasJob
+          ? updatedJobs
+          : [
+              ...updatedJobs,
+              {
+                ...activeTrip,
+                status: 'COMPLETED',
+                paymentStatus: 'UNPAID',
+              },
+            ];
         updates.push([STORAGE_KEYS.jobsList, JSON.stringify(nextJobs)]);
       }
 
@@ -447,7 +412,7 @@ function ActiveTripScreen({ navigation, route }) {
       await AsyncStorage.multiSet(updates);
 
       setTripState('COMPLETED');
-      setTrip({ ...activeTrip, status: 'COMPLETED' });
+      setTrip({ ...activeTrip, status: 'COMPLETED', paymentStatus: 'UNPAID' });
     } catch (_error) {
       Alert.alert('Error', 'Unable to complete this trip right now.');
     }
@@ -465,11 +430,38 @@ function ActiveTripScreen({ navigation, route }) {
       return;
     }
 
+    if (isOffline) {
+      if (currentAction.nextState === 'ARRIVED_PICKUP') {
+        await queueForSync('TRIP_STATE_TRANSITION', 'ARRIVED_PICKUP', 'Arrived at Pickup');
+        return;
+      }
+
+      if (currentAction.otpMode === 'DELIVERY') {
+        await queueForSync('OTP_VERIFICATION', 'DELIVERY_CONFIRMED', 'Confirm Delivery');
+        return;
+      }
+
+      if (currentAction.podUpload) {
+        await queueForSync('POD_UPLOAD', currentAction.nextState || 'POD_UPLOADED', 'Upload POD');
+        await queueForSync('TRIP_STATE_TRANSITION', currentAction.nextState || 'POD_UPLOADED', 'POD State');
+        return;
+      }
+
+      Alert.alert('Offline Mode', 'This action requires network and cannot be submitted right now.');
+      return;
+    }
+
     setIsActionBusy(true);
     try {
       if (currentAction.otpMode) {
         setOtpMode(currentAction.otpMode);
         setShowOtpModal(true);
+        return;
+      }
+
+      if (currentAction.podUpload) {
+        Alert.alert('POD Uploaded', 'Proof of delivery placeholder captured.');
+        await persistTripState(currentAction.nextState || 'POD_UPLOADED');
         return;
       }
 
@@ -492,242 +484,115 @@ function ActiveTripScreen({ navigation, route }) {
     isActionBusy,
     isCancelled,
     isHosExceeded,
+    isOffline,
     persistTripState,
+    queueForSync,
     trip,
   ]);
 
-  const routeBackToHome = useCallback(() => {
-    navigation.goBack();
-  }, [navigation]);
-
   if (isLoading) {
     return (
-      <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
-        <View style={styles.loaderContainer}>
-          <ActivityIndicator size="large" color="#2563EB" />
+      <AppScreen edges={['top', 'bottom']}>
+        <View style={{ alignItems: 'center', flex: 1, justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
-      </SafeAreaView>
+      </AppScreen>
     );
   }
 
   if (!trip) {
     return (
-      <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
-        <View style={styles.emptyState}>
-          <TruckIcon size={32} color="#9CA3AF" />
-          <Text style={styles.emptyTitle}>No Active Trip</Text>
-          <TouchableOpacity
-            activeOpacity={0.9}
-            style={styles.primaryButton}
-            onPress={routeBackToHome}
-          >
-            <Text style={styles.primaryButtonText}>Return to Dashboard</Text>
-          </TouchableOpacity>
+      <AppScreen edges={['top', 'bottom']}>
+        <AppHeader title="Active Trip" subtitle="No active assignment" />
+        <View style={{ paddingHorizontal: spacing[2] }}>
+          <AppCard>
+            <Text style={[typography.body, { color: colors.textPrimary }]}>No active trip found.</Text>
+            <AppButton title="Return to Dashboard" onPress={openDashboard} style={{ marginTop: spacing[2] }} />
+          </AppCard>
         </View>
-      </SafeAreaView>
+      </AppScreen>
     );
   }
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
-      {bannerItems.map(item => {
-        const isWarning = item.type === 'warning';
-        return (
+    <AppScreen edges={['top', 'bottom']}>
+      <AppHeader title="Active Trip" subtitle="State-driven execution" />
+      <ScrollView contentContainerStyle={{ paddingHorizontal: spacing[2], paddingBottom: spacing[6] }}>
+        {bannerItems.map(item => (
           <View
             key={item.id}
-            style={[
-              styles.banner,
-              isWarning ? styles.warningBanner : styles.cancelBanner,
-            ]}
+            style={{
+              backgroundColor: item.tone === 'critical' ? colors.critical : colors.warning,
+              borderRadius: 16,
+              paddingHorizontal: spacing[2],
+              paddingVertical: spacing[1],
+              marginBottom: spacing[1],
+            }}
           >
-            {isWarning ? (
-              <WarningIcon size={16} color={isWarning ? '#111827' : '#FFFFFF'} />
-            ) : (
-              <CancelIcon size={16} color="#FFFFFF" />
-            )}
-            <Text
-              style={[
-                styles.bannerText,
-                isWarning ? styles.warningBannerText : null,
-              ]}
-            >
-              {item.text}
-            </Text>
+            <Text style={[typography.caption, { color: '#FFFFFF' }]}>{item.text}</Text>
           </View>
-        );
-      })}
+        ))}
 
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Active Trip</Text>
-        <TouchableOpacity
-          activeOpacity={0.9}
-          style={styles.sosButton}
-          onPress={() => navigation.navigate('SOSFullScreen')}
-        >
-          <SOSIcon size={20} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          <View style={styles.tripHeaderRow}>
-            <View style={styles.tripIdRow}>
-              <TruckIcon size={20} color="#FFFFFF" />
-              <Text style={styles.tripId}>{trip.id}</Text>
-            </View>
-            <View
-              style={[
-                styles.stateBadge,
-                isCancelled
-                  ? styles.stateBadgeDanger
-                  : isCompleted
-                    ? styles.stateBadgeSuccess
-                    : styles.stateBadgePrimary,
-              ]}
-            >
-              <Text style={styles.stateBadgeText}>
-                {isCancelled ? 'CANCELLED' : tripState}
-              </Text>
+        <AppCard style={{ marginBottom: spacing[1] }}>
+          <View style={styles.rowTop}>
+            <Text style={[typography.h2, { color: colors.textPrimary }]}>{trip.id}</Text>
+            <View style={{ flexDirection: 'row', gap: spacing[1] }}>
+              <AppBadge label={isCancelled ? 'CRITICAL' : isCompleted ? 'COMPLETED' : tripState} />
+              {pendingTripActions.length > 0 ? <AppBadge label="Pending Sync" tone="warning" /> : null}
             </View>
           </View>
-
-          <View style={styles.routeRow}>
-            <LocationIcon size={18} color="#9CA3AF" />
-            <View style={styles.routeTextGroup}>
-              <Text style={styles.routeLabel}>Pickup</Text>
-              <Text style={styles.routeValue}>{trip.pickup}</Text>
-            </View>
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[1] }]}>Pickup</Text>
+          <Text style={[typography.label, { color: colors.textPrimary }]}>{trip.pickup}</Text>
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[1] }]}>Drop</Text>
+          <Text style={[typography.label, { color: colors.textPrimary }]}>{trip.drop}</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing[2] }}>
+            <Text style={[typography.caption, { color: colors.textSecondary }]}>Distance: {trip.distance}</Text>
+            <Text style={[typography.caption, { color: colors.textSecondary }]}>ETA: {trip.eta}</Text>
           </View>
+        </AppCard>
 
-          <View style={styles.routeRow}>
-            <MapPinIcon size={18} color="#9CA3AF" />
-            <View style={styles.routeTextGroup}>
-              <Text style={styles.routeLabel}>Drop</Text>
-              <Text style={styles.routeValue}>{trip.drop}</Text>
-            </View>
-          </View>
-
-          <View style={styles.metaRow}>
-            <Text style={styles.metaText}>Distance: {trip.distance}</Text>
-            <Text style={styles.metaText}>ETA: {trip.eta}</Text>
-          </View>
-          <Text style={styles.earningsText}>Expected Earnings: {formatAmount(trip.earnings)}</Text>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Trip Progress</Text>
+        <AppCard style={{ marginBottom: spacing[1] }}>
+          <Text style={[typography.h2, { color: colors.textPrimary, marginBottom: spacing[1] }]}>Trip Progress</Text>
           <TripProgressBar currentState={tripState} />
-        </View>
+        </AppCard>
 
-        <View style={styles.card}>
-          <View style={styles.hosHeader}>
-            <ClockIcon size={18} color="#9CA3AF" />
-            <Text style={styles.cardTitle}>HOS Monitoring</Text>
+        <AppCard style={{ marginBottom: spacing[1] }}>
+          <View style={styles.rowTop}>
+            <Text style={[typography.h2, { color: colors.textPrimary }]}>HOS Monitoring</Text>
+            <AppBadge
+              label={isHosExceeded ? 'CRITICAL' : isHosWarning ? 'UNPAID' : 'COMPLETED'}
+              tone={isHosExceeded ? 'critical' : isHosWarning ? 'warning' : 'success'}
+            />
           </View>
-          <Text style={styles.hosValue}>{formatDrivingTime(drivingMinutes)}</Text>
-          <Text
-            style={[
-              styles.hosNote,
-              isHosExceeded
-                ? styles.hosCritical
-                : isHosWarning
-                  ? styles.hosWarning
-                  : null,
-            ]}
-          >
-            {isHosExceeded
-              ? 'Exceeded legal limit'
-              : isHosWarning
-                ? 'Approaching legal limit'
-                : 'Within legal limit'}
+          <Text style={[typography.body, { color: colors.textPrimary, marginTop: spacing[1] }]}>
+            {Math.floor(drivingMinutes / 60)}h {String(drivingMinutes % 60).padStart(2, '0')}m
           </Text>
-        </View>
+        </AppCard>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Trip Expenses</Text>
-
-          <View style={styles.expenseRow}>
-            <View style={styles.expenseLabelRow}>
-              <FuelIcon size={17} color="#9CA3AF" />
-              <Text style={styles.expenseLabel}>Fuel</Text>
-            </View>
-            <Text style={styles.expenseValue}>{formatAmount(expenses.fuel)}</Text>
-          </View>
-
-          <View style={styles.expenseRow}>
-            <View style={styles.expenseLabelRow}>
-              <TollIcon size={17} color="#9CA3AF" />
-              <Text style={styles.expenseLabel}>Toll</Text>
-            </View>
-            <Text style={styles.expenseValue}>{formatAmount(expenses.toll)}</Text>
-          </View>
-
-          <View style={[styles.expenseRow, styles.expenseTotalRow]}>
-            <Text style={styles.expenseTotalLabel}>Total Logged</Text>
-            <Text style={styles.expenseTotalValue}>{formatAmount(expenses.total)}</Text>
-          </View>
-
+        <AppCard style={{ marginBottom: spacing[1] }}>
+          <Text style={[typography.h2, { color: colors.textPrimary }]}>Trip Expenses</Text>
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[1] }]}>Fuel: {formatAmount(expenses.fuel)}</Text>
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[0] }]}>Toll: {formatAmount(expenses.toll)}</Text>
+          <Text style={[typography.label, { color: colors.textPrimary, marginTop: spacing[1] }]}>Total: {formatAmount(expenses.total)}</Text>
           {!isCompleted && !isCancelled ? (
-            <TouchableOpacity
-              activeOpacity={0.9}
-              style={styles.secondaryButton}
-              onPress={() => setShowExpenseModal(true)}
-            >
-              <Text style={styles.secondaryButtonText}>Add Expense</Text>
-            </TouchableOpacity>
+            <AppButton title="Add Expense" variant="secondary" onPress={() => setShowExpenseModal(true)} style={{ marginTop: spacing[2] }} />
           ) : null}
-        </View>
+        </AppCard>
 
         {isCompleted ? (
-          <View style={styles.resultCard}>
-            <SuccessIcon size={24} color="#16A34A" />
-            <Text style={styles.resultTitle}>Trip Completed</Text>
-            <Text style={styles.resultText}>
-              Credit posted for {formatAmount(trip.earnings)}
-            </Text>
-            <TouchableOpacity
-              activeOpacity={0.9}
-              style={styles.primaryButton}
-              onPress={routeBackToHome}
-            >
-              <Text style={styles.primaryButtonText}>Back to Dashboard</Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
-
-        {isCancelled ? (
-          <View style={styles.resultCard}>
-            <CancelIcon size={24} color="#DC2626" />
-            <Text style={styles.resultTitle}>Trip Cancelled</Text>
-            <Text style={styles.resultText}>
-              {trip.cancellationReason || 'Cancelled by owner control room.'}
-            </Text>
-            <TouchableOpacity
-              activeOpacity={0.9}
-              style={styles.primaryButton}
-              onPress={routeBackToHome}
-            >
-              <Text style={styles.primaryButtonText}>Back to Dashboard</Text>
-            </TouchableOpacity>
-          </View>
+          <AppButton title="Back to Dashboard" onPress={openDashboard} style={{ marginTop: spacing[1] }} />
         ) : null}
 
         {!isCompleted && !isCancelled && currentAction ? (
-          <TouchableOpacity
-            activeOpacity={0.9}
-            style={[
-              styles.primaryButton,
-              (isActionBusy || isHosExceeded || isGpsDisabled) && !currentAction.complete
-                ? styles.primaryButtonDisabled
-                : null,
-            ]}
-            disabled={(isActionBusy || isHosExceeded || isGpsDisabled) && !currentAction.complete}
+          <AppButton
+            title={isActionBusy ? 'Processing...' : currentAction.label}
             onPress={handlePrimaryAction}
-          >
-            <Text style={styles.primaryButtonText}>
-              {isActionBusy ? 'Processing...' : currentAction.label}
-            </Text>
-          </TouchableOpacity>
+            disabled={
+              (isActionBusy || isHosExceeded || isGpsDisabled || (isOffline && !canQueueOfflineAction)) &&
+              !currentAction.complete
+            }
+            style={{ marginTop: spacing[1] }}
+          />
         ) : null}
       </ScrollView>
 
@@ -743,278 +608,17 @@ function ActiveTripScreen({ navigation, route }) {
         onClose={() => setShowOtpModal(false)}
         onConfirm={handleOTPConfirm}
       />
-    </SafeAreaView>
+
+      <OperationalSOSButton onPress={() => navigation.navigate('SOSFullScreen')} />
+    </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#111827',
-  },
-  loaderContainer: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-  },
-  emptyState: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
-  emptyTitle: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: '800',
-    marginTop: 10,
-  },
-  banner: {
-    alignItems: 'center',
-    borderBottomColor: '#374151',
-    borderBottomWidth: 1,
+  rowTop: {
     flexDirection: 'row',
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  warningBanner: {
-    backgroundColor: '#F59E0B',
-  },
-  cancelBanner: {
-    backgroundColor: '#DC2626',
-  },
-  bannerText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-    marginLeft: 8,
-  },
-  warningBannerText: {
-    color: '#111827',
-  },
-  header: {
     alignItems: 'center',
-    flexDirection: 'row',
     justifyContent: 'space-between',
-    minHeight: 72,
-    paddingHorizontal: 16,
-  },
-  headerTitle: {
-    color: '#FFFFFF',
-    fontSize: 28,
-    fontWeight: '800',
-  },
-  sosButton: {
-    alignItems: 'center',
-    backgroundColor: '#DC2626',
-    borderRadius: 22,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-  content: {
-    paddingBottom: 24,
-    paddingHorizontal: 16,
-  },
-  card: {
-    backgroundColor: '#1F2937',
-    borderColor: '#374151',
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 10,
-    padding: 16,
-  },
-  tripHeaderRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  tripIdRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-  },
-  tripId: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '800',
-    marginLeft: 8,
-  },
-  stateBadge: {
-    alignItems: 'center',
-    borderRadius: 999,
-    minHeight: 30,
-    minWidth: 114,
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-  },
-  stateBadgePrimary: {
-    backgroundColor: '#2563EB',
-  },
-  stateBadgeSuccess: {
-    backgroundColor: '#16A34A',
-  },
-  stateBadgeDanger: {
-    backgroundColor: '#DC2626',
-  },
-  stateBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  routeRow: {
-    flexDirection: 'row',
-    marginBottom: 10,
-  },
-  routeTextGroup: {
-    marginLeft: 8,
-  },
-  routeLabel: {
-    color: '#9CA3AF',
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  routeValue: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  metaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 2,
-  },
-  metaText: {
-    color: '#9CA3AF',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  earningsText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-    marginTop: 10,
-  },
-  cardTitle: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '800',
-    marginBottom: 12,
-  },
-  hosHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    marginBottom: 6,
-  },
-  hosValue: {
-    color: '#FFFFFF',
-    fontSize: 21,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  hosNote: {
-    color: '#9CA3AF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  hosWarning: {
-    color: '#F59E0B',
-  },
-  hosCritical: {
-    color: '#DC2626',
-  },
-  expenseRow: {
-    alignItems: 'center',
-    borderBottomColor: '#374151',
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 44,
-  },
-  expenseLabelRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-  },
-  expenseLabel: {
-    color: '#9CA3AF',
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  expenseValue: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  expenseTotalRow: {
-    borderBottomWidth: 0,
-    marginTop: 6,
-  },
-  expenseTotalLabel: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  expenseTotalValue: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  resultCard: {
-    alignItems: 'center',
-    backgroundColor: '#1F2937',
-    borderColor: '#374151',
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 10,
-    padding: 16,
-  },
-  resultTitle: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '800',
-    marginTop: 8,
-  },
-  resultText: {
-    color: '#9CA3AF',
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 6,
-    textAlign: 'center',
-  },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#2563EB',
-    borderRadius: 16,
-    justifyContent: 'center',
-    minHeight: 56,
-    marginBottom: 10,
-    paddingHorizontal: 16,
-  },
-  primaryButtonDisabled: {
-    backgroundColor: '#374151',
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  secondaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#111827',
-    borderColor: '#374151',
-    borderRadius: 16,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 56,
-    marginTop: 14,
-    paddingHorizontal: 16,
-  },
-  secondaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
   },
 });
 

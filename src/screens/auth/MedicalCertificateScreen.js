@@ -15,7 +15,7 @@ function MedicalCertificateScreen({ navigation }) {
         <TouchableOpacity
           style={styles.primaryButton}
           activeOpacity={0.9}
-          onPress={() => navigation.navigate('DailyHealthDeclaration')}
+          onPress={() => navigation.navigate('OnboardingBankDetails')}
         >
           <Text style={styles.primaryButtonText}>Continue</Text>
         </TouchableOpacity>

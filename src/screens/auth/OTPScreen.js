@@ -1,18 +1,20 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import {
-  Alert,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLanguage } from '../../i18n/LanguageProvider';
 
 const DEMO_OTP = '123456';
+const TOKEN_TTL_MS = 1000 * 60 * 60 * 12;
+
+const STORAGE_KEYS = {
+  isLoggedIn: 'isLoggedIn',
+  authToken: 'authToken',
+  authTokenExpiry: 'authTokenExpiry',
+};
 
 function OTPScreen({ navigation, route }) {
+  const { t } = useLanguage();
   const mobileNumber = route?.params?.mobileNumber || '';
   const [otp, setOtp] = useState('');
   const isValidOtp = useMemo(() => otp.length === 6, [otp]);
@@ -24,38 +26,61 @@ function OTPScreen({ navigation, route }) {
 
   const handleVerifyOtp = useCallback(async () => {
     if (!isValidOtp) {
-      Alert.alert('Invalid OTP', 'Enter the 6-digit OTP.');
+      Alert.alert(t('auth.invalidOtpTitle'), t('auth.invalidOtpLength'));
       return;
     }
 
     if (otp !== DEMO_OTP) {
-      Alert.alert('Invalid OTP', 'Use demo OTP 123456.');
+      Alert.alert(t('auth.invalidOtpTitle'), t('auth.invalidOtpDemo', { otp: DEMO_OTP }));
       return;
     }
 
     try {
-      await AsyncStorage.setItem('isLoggedIn', 'true');
-      navigation.replace('AadhaarKYC');
+      const now = Date.now();
+      const token = `DRV-${mobileNumber || 'TOKEN'}-${now}`;
+      const expiry = now + TOKEN_TTL_MS;
+
+      await AsyncStorage.multiSet([
+        [STORAGE_KEYS.isLoggedIn, 'true'],
+        [STORAGE_KEYS.authToken, token],
+        [STORAGE_KEYS.authTokenExpiry, String(expiry)],
+      ]);
+
+      const rootNavigation = navigation.getParent();
+      if (rootNavigation) {
+        rootNavigation.reset({
+          index: 0,
+          routes: [{ name: 'MainTabs' }],
+        });
+        return;
+      }
+
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' }],
+      });
     } catch (_error) {
-      Alert.alert('Unable to verify OTP', 'Please try again.');
+      Alert.alert(t('auth.verifyOtpFailed'), t('auth.tryAgain'));
     }
-  }, [isValidOtp, navigation, otp]);
+  }, [isValidOtp, mobileNumber, navigation, otp, t]);
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
       <View style={styles.container}>
-        <Text style={styles.title}>Verify OTP</Text>
+        <Text style={styles.title}>{t('auth.verifyOtpTitle')}</Text>
         <Text style={styles.subtitle}>
-          OTP sent to {mobileNumber ? `+91 ${mobileNumber}` : 'your mobile number'}
+          {t('auth.otpSentTo', {
+            number: mobileNumber ? `+91 ${mobileNumber}` : t('auth.yourNumber'),
+          })}
         </Text>
-        <Text style={styles.hint}>Demo OTP: {DEMO_OTP}</Text>
+        <Text style={styles.hint}>{t('auth.demoOtp', { otp: DEMO_OTP })}</Text>
 
         <TextInput
           value={otp}
           onChangeText={handleOtpChange}
           keyboardType="number-pad"
           maxLength={6}
-          placeholder="Enter 6-digit OTP"
+          placeholder={t('auth.otpPlaceholder')}
           placeholderTextColor="#6B7280"
           style={styles.input}
         />
@@ -66,7 +91,7 @@ function OTPScreen({ navigation, route }) {
           onPress={handleVerifyOtp}
           disabled={!isValidOtp}
         >
-          <Text style={styles.primaryButtonText}>Verify OTP</Text>
+          <Text style={styles.primaryButtonText}>{t('auth.verifyOtp')}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

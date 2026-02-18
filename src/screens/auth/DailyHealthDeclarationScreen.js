@@ -1,18 +1,31 @@
 import React, { useCallback } from 'react';
-import {
-  Alert,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+const KEYS = {
+  isKYCCompleted: 'isKYCCompleted',
+  onboardingCompleted: 'onboardingCompleted',
+  dailyHealthCheckDate: 'dailyHealthCheckDate',
+};
+
+function todayStamp() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = `${now.getMonth() + 1}`.padStart(2, '0');
+  const d = `${now.getDate()}`.padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 
 function DailyHealthDeclarationScreen({ navigation }) {
   const handleFinalConfirmation = useCallback(async () => {
     try {
-      await AsyncStorage.setItem('isKYCCompleted', 'true');
+      await AsyncStorage.multiSet([
+        [KEYS.isKYCCompleted, 'true'],
+        [KEYS.onboardingCompleted, 'true'],
+        [KEYS.dailyHealthCheckDate, todayStamp()],
+      ]);
+
       const rootNavigation = navigation.getParent();
       if (rootNavigation) {
         rootNavigation.reset({
@@ -27,20 +40,21 @@ function DailyHealthDeclarationScreen({ navigation }) {
         routes: [{ name: 'MainTabs' }],
       });
     } catch (_error) {
-      Alert.alert('Unable to finish KYC', 'Please try again.');
+      Alert.alert('Unable to finish onboarding', 'Please try again.');
     }
   }, [navigation]);
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
       <View style={styles.container}>
-        <Text style={styles.title}>Daily Health Declaration Screen</Text>
+        <Text style={styles.title}>Health Declaration Intro</Text>
+        <Text style={styles.subtitle}>Onboarding step. Daily compliance checks will run at each day start.</Text>
         <TouchableOpacity
           style={styles.primaryButton}
           activeOpacity={0.9}
           onPress={handleFinalConfirmation}
         >
-          <Text style={styles.primaryButtonText}>Confirm & Finish KYC</Text>
+          <Text style={styles.primaryButtonText}>Confirm & Continue To Dashboard</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -62,6 +76,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 24,
     fontWeight: '700',
+    textAlign: 'center',
+  },
+  subtitle: {
+    marginTop: 8,
+    color: '#9CA3AF',
+    fontSize: 14,
+    fontWeight: '600',
     textAlign: 'center',
   },
   primaryButton: {

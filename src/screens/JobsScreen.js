@@ -10,10 +10,14 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Line } from 'react-native-svg';
 import FilterBottomSheet from '../components/FilterBottomSheet';
 import JobCard from '../components/JobCard';
+import AppScreen from '../components/ui/AppScreen';
+import AppHeader from '../components/ui/AppHeader';
+import AppCard from '../components/ui/AppCard';
+import AppBadge from '../components/ui/AppBadge';
+import OperationalSOSButton from '../components/ui/OperationalSOSButton';
+import { useAppTheme } from '../theme/ThemeProvider';
 
 const STORAGE_KEYS = {
   jobsList: 'jobsList',
@@ -21,7 +25,7 @@ const STORAGE_KEYS = {
   tripState: 'tripState',
 };
 
-const STATUS_FILTERS = ['ALL', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
+const STATUS_FILTERS = ['ACTIVE', 'COMPLETED', 'PAID', 'UNPAID'];
 
 const MOCK_JOBS = [
   {
@@ -45,6 +49,7 @@ const MOCK_JOBS = [
     distance: '300 km',
     eta: '5h 00m',
     cancellationReason: '',
+    paymentStatus: 'PAID',
   },
   {
     id: 'PD-48269',
@@ -55,18 +60,8 @@ const MOCK_JOBS = [
     earnings: 0,
     distance: '160 km',
     eta: '2h 50m',
-    cancellationReason: 'Cancelled by owner due to route consolidation.',
-  },
-  {
-    id: 'PD-48268',
-    pickup: 'Mysore Warehouse',
-    drop: 'Bangalore Depot',
-    status: 'COMPLETED',
-    date: '2024-02-11',
-    earnings: 1900,
-    distance: '150 km',
-    eta: '2h 40m',
     cancellationReason: '',
+    paymentStatus: 'UNPAID',
   },
 ];
 
@@ -124,6 +119,10 @@ function normalizeJob(job) {
     distance: String(job.distance || '0 km'),
     eta: String(job.eta || '0h 00m'),
     cancellationReason: String(job.cancellationReason || ''),
+    paymentStatus:
+      String(job?.paymentStatus || '').toUpperCase() === 'PAID'
+        ? 'PAID'
+        : 'UNPAID',
   };
 }
 
@@ -146,6 +145,22 @@ function deriveStatusFromTripState(tripState) {
     return 'CANCELLED';
   }
   return 'ACTIVE';
+}
+
+function matchesStatusFilter(job, filter) {
+  if (filter === 'ACTIVE') {
+    return job.status === 'ACTIVE';
+  }
+  if (filter === 'COMPLETED') {
+    return job.status === 'COMPLETED';
+  }
+  if (filter === 'PAID') {
+    return job.status === 'COMPLETED' && job.paymentStatus === 'PAID';
+  }
+  if (filter === 'UNPAID') {
+    return job.status === 'COMPLETED' && job.paymentStatus !== 'PAID';
+  }
+  return true;
 }
 
 function toTimeStart(value) {
@@ -189,24 +204,14 @@ function isInDateRange(jobDate, range) {
   return true;
 }
 
-function FilterIcon({ size = 20, color = '#FFFFFF' }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" color={color}>
-      <Line x1="4" y1="7" x2="20" y2="7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <Line x1="7" y1="12" x2="17" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <Line x1="10" y1="17" x2="14" y2="17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </Svg>
-  );
-}
-
 function JobsScreen({ navigation }) {
+  const { colors, spacing, typography, radius } = useAppTheme();
   const [jobs, setJobs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ACTIVE');
   const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [sheetRange, setSheetRange] = useState('TODAY');
   const [appliedRange, setAppliedRange] = useState(null);
-  const [isOnline] = useState(false);
 
   const loadJobs = useCallback(async () => {
     try {
@@ -236,6 +241,7 @@ function JobsScreen({ navigation }) {
         const normalizedActiveTrip = {
           ...activeTrip,
           status: activeStatus,
+          paymentStatus: 'UNPAID',
         };
 
         if (!nextJobs.some(job => job.id === normalizedActiveTrip.id)) {
@@ -264,7 +270,7 @@ function JobsScreen({ navigation }) {
 
   const filteredJobs = useMemo(() => {
     return jobs.filter(job => {
-      if (statusFilter !== 'ALL' && job.status !== statusFilter) {
+      if (!matchesStatusFilter(job, statusFilter)) {
         return false;
       }
       return isInDateRange(job.date, appliedRange);
@@ -277,84 +283,83 @@ function JobsScreen({ navigation }) {
         navigation.navigate('JobDetailScreen', { job, jobId: job.id });
         return;
       }
-      if (job.status === 'COMPLETED') {
-        navigation.navigate('CompletedJobScreen', { job, jobId: job.id });
-        return;
-      }
-      navigation.navigate('CancelledJobScreen', { job, jobId: job.id });
+      navigation.navigate('CompletedJobScreen', { job, jobId: job.id });
     },
     [navigation],
   );
 
-  const renderStatusChips = () => (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.chipScroll}
-    >
-      {STATUS_FILTERS.map(item => {
-        const isSelected = statusFilter === item;
-        return (
-          <TouchableOpacity
-            key={item}
-            activeOpacity={0.9}
-            style={[styles.chip, isSelected ? styles.chipSelected : null]}
-            onPress={() => setStatusFilter(item)}
-          >
-            <Text style={[styles.chipText, isSelected ? styles.chipTextSelected : null]}>
-              {item.charAt(0)}{item.slice(1).toLowerCase()}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </ScrollView>
-  );
-
-  const renderListHeader = () => (
-    <View style={styles.listHeader}>
-      {renderStatusChips()}
-      {appliedRange ? (
-        <Text style={styles.rangeIndicator}>Date Filter: {sheetRange.replace('_', ' ')}</Text>
-      ) : null}
-    </View>
-  );
-
   return (
-    <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
-      {!isOnline ? (
-        <View style={styles.offlineBanner}>
-          <Text style={styles.offlineText}>No Internet - Showing Cached Jobs</Text>
-        </View>
-      ) : null}
+    <AppScreen edges={['top', 'bottom']}>
+      <AppHeader title="Jobs" subtitle="Dispatch queue and lifecycle" />
 
-      <View style={styles.header}>
-        <Text style={styles.title}>Jobs</Text>
-        <TouchableOpacity
-          activeOpacity={0.9}
-          style={styles.filterButton}
-          onPress={() => setShowFilterSheet(true)}
-        >
-          <FilterIcon />
-        </TouchableOpacity>
+      <View style={{ paddingHorizontal: spacing[2], paddingBottom: spacing[2] }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing[1] }}>
+          {STATUS_FILTERS.map(item => {
+            const isSelected = statusFilter === item;
+            return (
+              <TouchableOpacity
+                key={item}
+                activeOpacity={0.9}
+                style={{
+                  minHeight: spacing[6],
+                  borderRadius: radius.pill,
+                  borderWidth: 1,
+                  borderColor: isSelected ? colors.primary : colors.border,
+                  backgroundColor: isSelected ? colors.primary : colors.surface,
+                  justifyContent: 'center',
+                  paddingHorizontal: spacing[2],
+                }}
+                onPress={() => setStatusFilter(item)}
+              >
+                <Text style={[typography.label, { color: '#FFFFFF' }]}>{item}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        <View style={{ marginTop: spacing[1] }}>
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => setShowFilterSheet(true)}
+            style={{
+              minHeight: spacing[6],
+              borderRadius: radius.card,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.surfaceAlt,
+              justifyContent: 'center',
+              paddingHorizontal: spacing[2],
+            }}
+          >
+            <Text style={[typography.label, { color: colors.textPrimary }]}>Date Filter</Text>
+          </TouchableOpacity>
+        </View>
+
+        {appliedRange ? (
+          <View style={{ marginTop: spacing[1] }}>
+            <AppBadge label={sheetRange.replace('_', ' ')} tone="active" />
+          </View>
+        ) : null}
       </View>
 
       {isLoading ? (
-        <View style={styles.loader}>
-          <ActivityIndicator size="large" color="#2563EB" />
+        <View style={styles.loaderContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : filteredJobs.length === 0 ? (
+        <View style={{ paddingHorizontal: spacing[2] }}>
+          <AppCard>
+            <Text style={[typography.body, { color: colors.textPrimary }]}>No jobs found</Text>
+            <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[1] }]}>Adjust status or date filters.</Text>
+          </AppCard>
         </View>
       ) : (
         <FlatList
           data={filteredJobs}
           keyExtractor={item => item.id}
-          contentContainerStyle={styles.listContent}
-          ListHeaderComponent={renderListHeader}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>No Jobs Available</Text>
-            </View>
-          }
           renderItem={({ item }) => <JobCard job={item} onPress={handleJobPress} />}
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: spacing[2], paddingBottom: spacing[6] }}
         />
       )}
 
@@ -368,103 +373,17 @@ function JobsScreen({ navigation }) {
         }}
         onClose={() => setShowFilterSheet(false)}
       />
-    </SafeAreaView>
+
+      <OperationalSOSButton onPress={() => navigation.navigate('SOSFullScreen')} />
+    </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#111827',
-  },
-  offlineBanner: {
-    backgroundColor: '#1F2937',
-    borderBottomColor: '#374151',
-    borderBottomWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-  },
-  offlineText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 72,
-    paddingHorizontal: 16,
-  },
-  title: {
-    color: '#FFFFFF',
-    fontSize: 28,
-    fontWeight: '800',
-  },
-  filterButton: {
-    alignItems: 'center',
-    backgroundColor: '#1F2937',
-    borderColor: '#374151',
-    borderRadius: 16,
-    borderWidth: 1,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-  loader: {
+  loaderContainer: {
     alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
-  },
-  listContent: {
-    paddingBottom: 24,
-    paddingHorizontal: 16,
-  },
-  listHeader: {
-    marginBottom: 10,
-  },
-  chipScroll: {
-    paddingBottom: 4,
-  },
-  chip: {
-    alignItems: 'center',
-    borderColor: '#374151',
-    borderRadius: 999,
-    borderWidth: 1,
-    justifyContent: 'center',
-    marginRight: 8,
-    minHeight: 40,
-    minWidth: 100,
-    paddingHorizontal: 14,
-  },
-  chipSelected: {
-    backgroundColor: '#2563EB',
-    borderColor: '#2563EB',
-  },
-  chipText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  chipTextSelected: {
-    color: '#FFFFFF',
-  },
-  rangeIndicator: {
-    color: '#9CA3AF',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 8,
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 280,
-  },
-  emptyText: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: '700',
   },
 });
 

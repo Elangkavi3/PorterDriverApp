@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Line } from 'react-native-svg';
+import { useAppTheme } from '../theme/ThemeProvider';
 
 const STEPS = ['Assigned', 'Pickup', 'Transit', 'Delivered'];
 
@@ -17,22 +18,17 @@ const STATE_TO_STEP = {
   CANCELLED: 0,
 };
 
-const COLORS = {
-  completed: '#16A34A',
-  current: '#2563EB',
-  upcoming: '#374151',
-  labelMuted: '#9CA3AF',
-};
-
 function TripProgressBar({ currentState = 'ASSIGNED' }) {
+  const { colors, typography, spacing } = useAppTheme();
   const [width, setWidth] = useState(0);
 
-  const currentStep = useMemo(() => {
-    if (Object.prototype.hasOwnProperty.call(STATE_TO_STEP, currentState)) {
-      return STATE_TO_STEP[currentState];
-    }
-    return 0;
-  }, [currentState]);
+  const currentStep = useMemo(
+    () =>
+      Object.prototype.hasOwnProperty.call(STATE_TO_STEP, currentState)
+        ? STATE_TO_STEP[currentState]
+        : 0,
+    [currentState],
+  );
 
   const isCompletedTrip = currentState === 'COMPLETED';
   const svgHeight = 28;
@@ -54,22 +50,22 @@ function TripProgressBar({ currentState = 'ASSIGNED' }) {
 
   const getNodeColor = index => {
     if (isCompletedTrip || index < currentStep) {
-      return COLORS.completed;
+      return colors.success;
     }
     if (index === currentStep) {
-      return COLORS.current;
+      return colors.primary;
     }
-    return COLORS.upcoming;
+    return colors.border;
   };
 
   const getLineColor = index => {
     if (isCompletedTrip || index < currentStep - 1) {
-      return COLORS.completed;
+      return colors.success;
     }
     if (index === currentStep - 1) {
-      return COLORS.current;
+      return colors.primary;
     }
-    return COLORS.upcoming;
+    return colors.border;
   };
 
   return (
@@ -108,16 +104,16 @@ function TripProgressBar({ currentState = 'ASSIGNED' }) {
         ) : null}
       </View>
 
-      <View style={styles.labelsRow}>
+      <View style={[styles.labelsRow, { marginTop: spacing[1] }]}>
         {STEPS.map((label, index) => {
           const color =
             isCompletedTrip || index < currentStep
-              ? COLORS.completed
+              ? colors.success
               : index === currentStep
-                ? COLORS.current
-                : COLORS.labelMuted;
+                ? colors.primary
+                : colors.textSecondary;
           return (
-            <Text key={label} style={[styles.label, { color }]}>
+            <Text key={label} style={[styles.label, typography.caption, { color }]}> 
               {label}
             </Text>
           );
@@ -138,12 +134,9 @@ const styles = StyleSheet.create({
   labelsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 8,
   },
   label: {
     flex: 1,
-    fontSize: 12,
-    fontWeight: '700',
     textAlign: 'center',
   },
 });

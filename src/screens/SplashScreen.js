@@ -1,61 +1,23 @@
-import React, { useEffect } from 'react';
-import { StyleSheet, Text } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React from 'react';
+import { Text, View } from 'react-native';
+import AppScreen from '../components/ui/AppScreen';
+import { useAppTheme } from '../theme/ThemeProvider';
+import { useLanguage } from '../i18n/LanguageProvider';
 
-function SplashScreen({ navigation }) {
-  useEffect(() => {
-    let mounted = true;
-
-    const bootstrap = async () => {
-      try {
-        const isLoggedIn = await AsyncStorage.getItem('isLoggedIn');
-        if (!mounted) {
-          return;
-        }
-        if (isLoggedIn === 'true') {
-          const parentNavigation = navigation.getParent();
-          if (parentNavigation) {
-            parentNavigation.replace('MainTabs');
-            return;
-          }
-          navigation.replace('MainTabs');
-          return;
-        }
-        navigation.replace('Login');
-      } catch (_error) {
-        if (mounted) {
-          navigation.replace('Login');
-        }
-      }
-    };
-
-    bootstrap();
-
-    return () => {
-      mounted = false;
-    };
-  }, [navigation]);
+function SplashScreen() {
+  const { colors, spacing, typography } = useAppTheme();
+  const { t } = useLanguage();
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} style={styles.container}>
-      <Text style={styles.title}>Driver App</Text>
-    </SafeAreaView>
+    <AppScreen>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={[typography.title, { color: colors.textPrimary }]}>{t('brand.appName')}</Text>
+        <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[1] }]}>
+          {t('brand.tagline')}
+        </Text>
+      </View>
+    </AppScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '600',
-    color: '#111111',
-  },
-});
 
 export default SplashScreen;

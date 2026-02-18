@@ -1,13 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import {
-  Animated,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Animated, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useAppTheme } from '../theme/ThemeProvider';
 
 const OPTIONS = [
   { label: 'Today', value: 'TODAY' },
@@ -15,13 +8,8 @@ const OPTIONS = [
   { label: 'This Month', value: 'THIS_MONTH' },
 ];
 
-function FilterBottomSheet({
-  visible,
-  selectedRange,
-  onSelectRange,
-  onApply,
-  onClose,
-}) {
+function FilterBottomSheet({ visible, selectedRange, onSelectRange, onApply, onClose }) {
+  const { colors, spacing, radius, typography } = useAppTheme();
   const slideAnim = useRef(new Animated.Value(320)).current;
 
   useEffect(() => {
@@ -33,45 +21,56 @@ function FilterBottomSheet({
   }, [slideAnim, visible]);
 
   return (
-    <Modal
-      animationType="fade"
-      transparent
-      statusBarTranslucent
-      visible={visible}
-      onRequestClose={onClose}
-    >
+    <Modal animationType="fade" transparent statusBarTranslucent visible={visible} onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} />
       <Animated.View
         style={[
           styles.sheet,
           {
             transform: [{ translateY: slideAnim }],
+            backgroundColor: colors.surface,
+            borderTopLeftRadius: radius.card,
+            borderTopRightRadius: radius.card,
+            borderColor: colors.border,
+            paddingHorizontal: spacing[2],
+            paddingTop: spacing[1],
+            paddingBottom: spacing[2],
           },
         ]}
       >
-        <View style={styles.handle} />
-        <Text style={styles.title}>Date Range</Text>
+        <View style={[styles.handle, { backgroundColor: colors.border }]} />
+        <Text style={[typography.h2, { color: colors.textPrimary, marginBottom: spacing[1] }]}>Date Range</Text>
 
-        <View style={styles.optionGroup}>
+        <View style={{ marginBottom: spacing[1], rowGap: spacing[1] }}>
           {OPTIONS.map(option => {
             const isSelected = selectedRange === option.value;
             return (
               <TouchableOpacity
                 key={option.value}
                 activeOpacity={0.9}
-                style={[styles.option, isSelected ? styles.optionSelected : null]}
+                style={[
+                  styles.option,
+                  {
+                    borderRadius: radius.card,
+                    borderColor: isSelected ? colors.primary : colors.border,
+                    backgroundColor: isSelected ? colors.primary : colors.surfaceAlt,
+                    minHeight: spacing[6],
+                  },
+                ]}
                 onPress={() => onSelectRange(option.value)}
               >
-                <Text style={[styles.optionText, isSelected ? styles.optionTextSelected : null]}>
-                  {option.label}
-                </Text>
+                <Text style={[typography.body, { color: '#FFFFFF' }]}>{option.label}</Text>
               </TouchableOpacity>
             );
           })}
         </View>
 
-        <TouchableOpacity activeOpacity={0.9} style={styles.applyButton} onPress={onApply}>
-          <Text style={styles.applyText}>Apply</Text>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          style={[styles.applyButton, { minHeight: spacing[6], borderRadius: radius.card, backgroundColor: colors.primary }]}
+          onPress={onApply}
+        >
+          <Text style={[typography.body, { color: '#FFFFFF' }]}>Apply</Text>
         </TouchableOpacity>
       </Animated.View>
     </Modal>
@@ -88,70 +87,28 @@ const styles = StyleSheet.create({
     top: 0,
   },
   sheet: {
-    backgroundColor: '#1F2937',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
     borderWidth: 1,
-    borderColor: '#374151',
     bottom: 0,
     left: 0,
-    paddingBottom: 24,
-    paddingHorizontal: 16,
-    paddingTop: 12,
     position: 'absolute',
     right: 0,
   },
   handle: {
     alignSelf: 'center',
-    backgroundColor: '#4B5563',
     borderRadius: 2,
     height: 4,
     marginBottom: 12,
     width: 52,
   },
-  title: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 12,
-  },
-  optionGroup: {
-    marginBottom: 14,
-    rowGap: 8,
-  },
   option: {
     alignItems: 'center',
-    backgroundColor: '#111827',
-    borderColor: '#374151',
-    borderRadius: 14,
     borderWidth: 1,
     justifyContent: 'center',
-    minHeight: 56,
     paddingHorizontal: 16,
-  },
-  optionSelected: {
-    backgroundColor: '#2563EB',
-    borderColor: '#2563EB',
-  },
-  optionText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  optionTextSelected: {
-    color: '#FFFFFF',
   },
   applyButton: {
     alignItems: 'center',
-    backgroundColor: '#2563EB',
-    borderRadius: 16,
     justifyContent: 'center',
-    minHeight: 56,
-  },
-  applyText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
   },
 });
 

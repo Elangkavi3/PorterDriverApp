@@ -1,15 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import {
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import FuelIcon from './icons/FuelIcon';
 import TollIcon from './icons/TollIcon';
+import { useAppTheme } from '../theme/ThemeProvider';
 
 const CATEGORIES = [
   { key: 'Fuel', Icon: FuelIcon },
@@ -17,6 +10,7 @@ const CATEGORIES = [
 ];
 
 function ExpenseModal({ visible, onClose, onSave }) {
+  const { colors, spacing, radius, typography } = useAppTheme();
   const [category, setCategory] = useState('Fuel');
   const [amount, setAmount] = useState('');
 
@@ -46,18 +40,25 @@ function ExpenseModal({ visible, onClose, onSave }) {
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={handleClose}
-    >
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
       <Pressable style={styles.backdrop} onPress={handleClose}>
-        <Pressable style={styles.container} onPress={() => {}}>
-          <Text style={styles.title}>Log Expense</Text>
+        <Pressable
+          style={[
+            styles.container,
+            {
+              backgroundColor: colors.surface,
+              borderTopLeftRadius: radius.card,
+              borderTopRightRadius: radius.card,
+              borderColor: colors.border,
+              padding: spacing[2],
+            },
+          ]}
+          onPress={() => {}}
+        >
+          <Text style={[typography.h1, { color: colors.textPrimary, marginBottom: spacing[1] }]}>Log Expense</Text>
 
-          <Text style={styles.label}>Category</Text>
-          <View style={styles.categoryRow}>
+          <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: spacing[1] }]}>Category</Text>
+          <View style={[styles.categoryRow, { marginBottom: spacing[1] }]}>
             {CATEGORIES.map(item => {
               const isSelected = category === item.key;
               const IconComponent = item.Icon;
@@ -67,52 +68,72 @@ function ExpenseModal({ visible, onClose, onSave }) {
                   activeOpacity={0.9}
                   style={[
                     styles.categoryChip,
-                    isSelected ? styles.categoryChipSelected : null,
+                    {
+                      minHeight: spacing[6],
+                      borderRadius: radius.pill,
+                      borderColor: isSelected ? colors.primary : colors.border,
+                      backgroundColor: isSelected ? colors.primary : colors.surfaceAlt,
+                    },
                   ]}
                   onPress={() => setCategory(item.key)}
                 >
-                  <IconComponent size={18} color={isSelected ? '#FFFFFF' : '#9CA3AF'} />
-                  <Text
-                    style={[
-                      styles.categoryText,
-                      isSelected ? styles.categoryTextSelected : null,
-                    ]}
-                  >
-                    {item.key}
-                  </Text>
+                  <IconComponent size={18} color={isSelected ? '#FFFFFF' : colors.textSecondary} />
+                  <Text style={[typography.label, { color: '#FFFFFF', marginLeft: spacing[1] }]}>{item.key}</Text>
                 </TouchableOpacity>
               );
             })}
           </View>
 
-          <Text style={styles.label}>Amount</Text>
+          <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: spacing[1] }]}>Amount</Text>
           <TextInput
             value={amount}
             onChangeText={text => setAmount(text.replace(/[^0-9.]/g, ''))}
             keyboardType="decimal-pad"
             placeholder="Enter amount"
-            placeholderTextColor="#9CA3AF"
-            style={styles.input}
+            placeholderTextColor={colors.textSecondary}
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.surfaceAlt,
+                borderColor: colors.border,
+                borderRadius: radius.card,
+                color: colors.textPrimary,
+                minHeight: spacing[6],
+                paddingHorizontal: spacing[2],
+              },
+            ]}
           />
 
-          <View style={styles.actions}>
+          <View style={[styles.actions, { marginTop: spacing[2], gap: spacing[1] }]}> 
             <TouchableOpacity
               activeOpacity={0.9}
-              style={styles.cancelButton}
+              style={[
+                styles.cancelButton,
+                {
+                  minHeight: spacing[6],
+                  borderRadius: radius.card,
+                  borderColor: colors.border,
+                  backgroundColor: colors.surfaceAlt,
+                },
+              ]}
               onPress={handleClose}
             >
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={[typography.body, { color: colors.textPrimary }]}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
               activeOpacity={0.9}
               disabled={isSaveDisabled}
               style={[
                 styles.saveButton,
-                isSaveDisabled ? styles.saveButtonDisabled : null,
+                {
+                  minHeight: spacing[6],
+                  borderRadius: radius.card,
+                  backgroundColor: isSaveDisabled ? colors.border : colors.primary,
+                },
               ]}
               onPress={handleSave}
             >
-              <Text style={styles.saveText}>Save</Text>
+              <Text style={[typography.body, { color: '#FFFFFF' }]}>Save</Text>
             </TouchableOpacity>
           </View>
         </Pressable>
@@ -128,101 +149,36 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   container: {
-    backgroundColor: '#111827',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
     borderWidth: 1,
-    borderColor: '#374151',
-    padding: 16,
-  },
-  title: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: '800',
-    marginBottom: 14,
-  },
-  label: {
-    color: '#9CA3AF',
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 8,
   },
   categoryRow: {
     flexDirection: 'row',
-    marginBottom: 14,
+    gap: 8,
   },
   categoryChip: {
     alignItems: 'center',
-    backgroundColor: '#1F2937',
-    borderColor: '#4B5563',
-    borderRadius: 14,
     borderWidth: 1,
     flexDirection: 'row',
     justifyContent: 'center',
-    marginRight: 8,
-    minHeight: 48,
     minWidth: 108,
-    paddingHorizontal: 12,
-  },
-  categoryChipSelected: {
-    backgroundColor: '#2563EB',
-    borderColor: '#2563EB',
-  },
-  categoryText: {
-    color: '#9CA3AF',
-    fontSize: 14,
-    fontWeight: '700',
-    marginLeft: 8,
-  },
-  categoryTextSelected: {
-    color: '#FFFFFF',
+    paddingHorizontal: 16,
   },
   input: {
-    backgroundColor: '#1F2937',
-    borderColor: '#4B5563',
-    borderRadius: 16,
     borderWidth: 1,
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-    minHeight: 56,
-    paddingHorizontal: 16,
   },
   actions: {
     flexDirection: 'row',
-    marginTop: 16,
   },
   cancelButton: {
-    alignItems: 'center',
-    backgroundColor: '#1F2937',
-    borderColor: '#4B5563',
-    borderRadius: 16,
-    borderWidth: 1,
     flex: 1,
+    borderWidth: 1,
+    alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
-    minHeight: 56,
-  },
-  cancelText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
   },
   saveButton: {
-    alignItems: 'center',
-    backgroundColor: '#2563EB',
-    borderRadius: 16,
     flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 56,
-  },
-  saveButtonDisabled: {
-    backgroundColor: '#374151',
-  },
-  saveText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
   },
 });
 

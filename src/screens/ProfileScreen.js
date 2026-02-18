@@ -1,174 +1,81 @@
-﻿import React, { useCallback, useMemo, useState } from 'react';
-import {
-  Alert,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Alert, Modal, ScrollView, Switch, Text, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import AppScreen from '../components/ui/AppScreen';
+import AppCard from '../components/ui/AppCard';
+import AppBadge from '../components/ui/AppBadge';
+import AppButton from '../components/ui/AppButton';
+import AppHeader from '../components/ui/AppHeader';
+import { useAppTheme } from '../theme/ThemeProvider';
+import { useLanguage } from '../i18n/LanguageProvider';
+import {
+  formatDocumentDate,
+  summarizeRequiredDocuments,
+} from '../services/documentVerification';
+import {
+  getVehicleStatusLabel,
+  getVehicleStatusTone,
+  normalizeVehicleStatus,
+} from '../services/vehicleStatus';
 
 const STORAGE_KEYS = {
   profile: 'driverProfile',
   documents: 'driverDocuments',
-  walletBalance: 'walletBalance',
-  isLoggedIn: 'isLoggedIn',
-};
-
-const COLORS = {
-  background: '#111827',
-  card: '#1F2937',
-  textPrimary: '#FFFFFF',
-  textSecondary: '#9CA3AF',
-  primary: '#2563EB',
-  success: '#16A34A',
-  warning: '#F59E0B',
-  danger: '#DC2626',
-  border: '#374151',
+  settings: 'driverSettings',
+  vehicleSafetyStatus: 'vehicleSafetyStatus',
 };
 
 const MOCK_PROFILE = {
   id: 'PD-10482',
   name: 'Ravi Kumar',
   phone: '9876543210',
-  rating: 4.8,
-  completedTrips: 124,
-  onTimePercentage: 96,
   vehicleType: '16ft Truck',
   ownerName: 'Porter Logistics',
+  bankName: 'HDFC Bank',
+  accountMasked: 'XXXXXX6721',
+  ifsc: 'HDFC0000217',
 };
 
-const DEFAULT_DOCUMENTS = [
-  { name: 'Driving License', expiryDate: '2027-01-31' },
-  { name: 'Fitness Certificate', expiryDate: '2026-03-05' },
-  { name: 'Insurance', expiryDate: '2026-01-05' },
-  { name: 'RC', expiryDate: '2027-06-30' },
-  { name: 'PUC', expiryDate: '2026-08-30' },
-];
+const DEFAULT_SETTINGS = {
+  darkMode: true,
+  notificationsEnabled: true,
+  language: 'English',
+};
+const DISPLAY_APP_VERSION = '1.0.0';
 
 function parseJSON(value, fallback) {
   try {
     return value ? JSON.parse(value) : fallback;
-  } catch (error) {
+  } catch (_error) {
     return fallback;
   }
 }
 
-function parseDate(value) {
-  if (!value || typeof value !== 'string') {
-    return null;
-  }
-
-  const parts = value.split('-');
-  if (parts.length !== 3) {
-    return null;
-  }
-
-  const year = Number(parts[0]);
-  const month = Number(parts[1]);
-  const day = Number(parts[2]);
-
-  if (!year || !month || !day) {
-    return null;
-  }
-
-  const date = new Date(year, month - 1, day);
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day
-  ) {
-    return null;
-  }
-
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
-
-function resolveDocumentStatus(expiryDate) {
-  const date = parseDate(expiryDate);
-  if (!date) {
-    return 'EXPIRED';
-  }
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const diffDays = Math.ceil((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-
-  if (diffDays < 0) {
-    return 'EXPIRED';
-  }
-
-  if (diffDays <= 30) {
-    return 'EXPIRING';
-  }
-
-  return 'VALID';
-}
-
-function normalizeDocuments(documents) {
-  if (!Array.isArray(documents) || documents.length === 0) {
-    return DEFAULT_DOCUMENTS.map((doc) => ({
-      ...doc,
-      status: resolveDocumentStatus(doc.expiryDate),
-    }));
-  }
-
-  return documents.map((doc) => ({
-    name: doc?.name || 'Document',
-    expiryDate: doc?.expiryDate || '',
-    status: resolveDocumentStatus(doc?.expiryDate),
-  }));
-}
-
-function getStatusColors(status) {
-  if (status === 'VALID') {
-    return { borderColor: COLORS.success, textColor: COLORS.success };
-  }
-
-  if (status === 'EXPIRING') {
-    return { borderColor: COLORS.warning, textColor: COLORS.warning };
-  }
-
-  return { borderColor: COLORS.danger, textColor: COLORS.danger };
-}
-
-function formatDateLabel(dateString) {
-  const date = parseDate(dateString);
-  if (!date) {
-    return 'Invalid date';
-  }
-
-  const day = `${date.getDate()}`.padStart(2, '0');
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const year = date.getFullYear();
-
-  return `${day}/${month}/${year}`;
-}
-
 function ProfileScreen({ navigation }) {
+  const { colors, spacing, typography, mode, setDarkMode } = useAppTheme();
+  const { t, tx, language, currentLanguage, supportedLanguages, setLanguage } = useLanguage();
   const [profile, setProfile] = useState(MOCK_PROFILE);
-  const [documents, setDocuments] = useState([]);
-  const [isLogoutModalVisible, setIsLogoutModalVisible] = useState(false);
+  const [documentSummary, setDocumentSummary] = useState(() =>
+    summarizeRequiredDocuments([]),
+  );
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [vehicleStatus, setVehicleStatus] = useState('INSPECTION_PENDING');
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
 
   const hydrateProfileData = useCallback(async () => {
     try {
       const stored = await AsyncStorage.multiGet([
         STORAGE_KEYS.profile,
         STORAGE_KEYS.documents,
-        STORAGE_KEYS.walletBalance,
-        STORAGE_KEYS.isLoggedIn,
+        STORAGE_KEYS.settings,
+        STORAGE_KEYS.vehicleSafetyStatus,
       ]);
 
       const dataMap = Object.fromEntries(stored);
       let profileData = parseJSON(dataMap[STORAGE_KEYS.profile], null);
-      let documentsData = parseJSON(dataMap[STORAGE_KEYS.documents], null);
+      let documentsData = parseJSON(dataMap[STORAGE_KEYS.documents], []);
+      let settingsData = parseJSON(dataMap[STORAGE_KEYS.settings], null);
       const updates = [];
 
       if (!profileData) {
@@ -176,15 +83,14 @@ function ProfileScreen({ navigation }) {
         updates.push([STORAGE_KEYS.profile, JSON.stringify(profileData)]);
       }
 
-      documentsData = normalizeDocuments(documentsData);
-      updates.push([STORAGE_KEYS.documents, JSON.stringify(documentsData)]);
-
-      if (!dataMap[STORAGE_KEYS.walletBalance]) {
-        updates.push([STORAGE_KEYS.walletBalance, '0']);
+      if (!Array.isArray(documentsData)) {
+        documentsData = [];
+        updates.push([STORAGE_KEYS.documents, JSON.stringify([])]);
       }
 
-      if (!dataMap[STORAGE_KEYS.isLoggedIn]) {
-        updates.push([STORAGE_KEYS.isLoggedIn, 'true']);
+      if (!settingsData) {
+        settingsData = DEFAULT_SETTINGS;
+        updates.push([STORAGE_KEYS.settings, JSON.stringify(DEFAULT_SETTINGS)]);
       }
 
       if (updates.length > 0) {
@@ -192,11 +98,20 @@ function ProfileScreen({ navigation }) {
       }
 
       setProfile(profileData);
-      setDocuments(documentsData);
-    } catch (error) {
-      Alert.alert('Error', 'Unable to load profile data.');
+      setDocumentSummary(summarizeRequiredDocuments(documentsData));
+      setSettings({
+        darkMode: typeof settingsData.darkMode === 'boolean' ? settingsData.darkMode : true,
+        notificationsEnabled:
+          typeof settingsData.notificationsEnabled === 'boolean'
+            ? settingsData.notificationsEnabled
+            : true,
+        language: settingsData.language || 'English',
+      });
+      setVehicleStatus(normalizeVehicleStatus(dataMap[STORAGE_KEYS.vehicleSafetyStatus]));
+    } catch (_error) {
+      Alert.alert(t('alerts.tripBlocked'), t('profile.loadError'));
     }
-  }, []);
+  }, [t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -208,21 +123,45 @@ function ProfileScreen({ navigation }) {
     const names = profile?.name?.split(' ') || [];
     return names
       .slice(0, 2)
-      .map((part) => part?.[0] || '')
+      .map(part => part?.[0] || '')
       .join('')
       .toUpperCase();
   }, [profile?.name]);
 
-  const isLicenseExpired = useMemo(() => {
-    return documents.some(
-      (doc) => doc.name === 'Driving License' && resolveDocumentStatus(doc.expiryDate) === 'EXPIRED',
-    );
-  }, [documents]);
+  const documentsForDisplay = useMemo(() => {
+    if (profile?.vehicleRcApplicable === false) {
+      return documentSummary.documents.filter(item => item.key !== 'vehicle_rc');
+    }
+    return documentSummary.documents;
+  }, [documentSummary.documents, profile?.vehicleRcApplicable]);
+
+  const updateSettings = useCallback(async next => {
+    setSettings(next);
+    await AsyncStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(next));
+  }, []);
+
+  const onToggleTheme = useCallback(
+    async value => {
+      await setDarkMode(value);
+      await updateSettings({ ...settings, darkMode: value });
+    },
+    [setDarkMode, settings, updateSettings],
+  );
+
+  const openDocumentUpload = useCallback(
+    document => {
+      navigation.navigate('DocumentUploadScreen', {
+        documentName: tx(document.name),
+        documentKey: document.key,
+        expiryDate: document.expiryDate,
+      });
+    },
+    [navigation, tx],
+  );
 
   const onConfirmLogout = useCallback(async () => {
     try {
       await AsyncStorage.clear();
-      setIsLogoutModalVisible(false);
 
       const tabNavigator = navigation.getParent();
       const rootNavigator = tabNavigator?.getParent();
@@ -235,440 +174,243 @@ function ProfileScreen({ navigation }) {
       } else {
         navigation.navigate('AuthStack');
       }
-    } catch (error) {
-      Alert.alert('Error', 'Unable to logout right now.');
+    } catch (_error) {
+      Alert.alert(t('alerts.tripBlocked'), t('profile.logoutError'));
     }
-  }, [navigation]);
+  }, [navigation, t]);
+
+  const onSelectLanguage = useCallback(
+    async code => {
+      await setLanguage(code);
+      setShowLanguageModal(false);
+    },
+    [setLanguage],
+  );
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
-        <Text style={styles.screenTitle}>Profile</Text>
+    <AppScreen edges={['top', 'bottom']}>
+      <AppHeader title={t('profile.title')} subtitle={t('profile.subtitle')} />
+      <ScrollView
+        contentContainerStyle={{ paddingHorizontal: spacing[2], paddingBottom: spacing[6] }}
+      >
+        <AppCard style={{ marginBottom: spacing[1] }}>
+          <Text style={[typography.h2, { color: colors.textPrimary }]}>
+            {t('brand.appName')}
+          </Text>
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[1] }]}>
+            {t('brand.versionLabel', { version: DISPLAY_APP_VERSION })}
+          </Text>
+        </AppCard>
 
-        {isLicenseExpired ? (
-          <View style={styles.warningBanner}>
-            <Text style={styles.warningBannerText}>Your license has expired. Update required.</Text>
-          </View>
-        ) : null}
-
-        <View style={styles.card}>
-          <View style={styles.driverInfoRow}>
-            <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarText}>{initials || 'DR'}</Text>
+        <AppCard style={{ marginBottom: spacing[1] }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <View
+              style={{
+                minHeight: 56,
+                minWidth: 56,
+                borderRadius: 999,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: colors.surfaceAlt,
+                borderWidth: 1,
+                borderColor: colors.border,
+              }}
+            >
+              <Text style={[typography.h2, { color: colors.textPrimary }]}>
+                {initials || 'DR'}
+              </Text>
             </View>
+            <AppBadge label="ACTIVE" />
+          </View>
+          <Text style={[typography.h2, { color: colors.textPrimary, marginTop: spacing[1] }]}>
+            {profile.name}
+          </Text>
+          <Text style={[typography.caption, { color: colors.textSecondary }]}>
+            {t('profile.driverId')}: {profile.id}
+          </Text>
+          <Text style={[typography.caption, { color: colors.textSecondary }]}>
+            {t('profile.owner')}: {profile.ownerName}
+          </Text>
+          <Text style={[typography.caption, { color: colors.textSecondary }]}>
+            {t('profile.vehicle')}: {profile.vehicleType}
+          </Text>
+          <View style={{ marginTop: spacing[1] }}>
+            <AppBadge
+              label={getVehicleStatusLabel(vehicleStatus)}
+              tone={getVehicleStatusTone(vehicleStatus)}
+            />
+          </View>
+        </AppCard>
 
-            <View style={styles.driverDetails}>
-              <Text style={styles.driverName}>{profile.name}</Text>
-              <Text style={styles.driverMeta}>Driver ID: {profile.id}</Text>
-              <Text style={styles.driverMeta}>Owner: {profile.ownerName}</Text>
-              <Text style={styles.driverMeta}>Vehicle: {profile.vehicleType}</Text>
+        <AppCard style={{ marginBottom: spacing[1] }}>
+          <Text style={[typography.h2, { color: colors.textPrimary }]}>
+            {t('profile.documentVerification')}
+          </Text>
+          <Text
+            style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[1] }]}
+          >
+            {t('profile.documentStatus')}
+          </Text>
 
-              <View style={styles.ratingRow}>
-                <Text style={styles.ratingText}>★ {Number(profile.rating || 0).toFixed(1)}</Text>
-                <View style={styles.verifiedBadge}>
-                  <Text style={styles.verifiedBadgeText}>VERIFIED</Text>
-                </View>
+          {documentsForDisplay.map((doc, index) => (
+            <TouchableOpacity
+              key={doc.key}
+              activeOpacity={0.88}
+              onPress={() => openDocumentUpload(doc)}
+              style={{
+                marginTop: spacing[1],
+                borderTopWidth: index === 0 ? 0 : 1,
+                borderTopColor: colors.border,
+                paddingTop: index === 0 ? 0 : spacing[1],
+                minHeight: 48,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <View>
+                <Text style={[typography.label, { color: colors.textPrimary }]}>
+                  {tx(doc.name)}
+                </Text>
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>
+                  {t('profile.expiry')}: {formatDocumentDate(doc.expiryDate)}
+                </Text>
               </View>
-            </View>
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={styles.card}
-          activeOpacity={0.9}
-          onPress={() => navigation.navigate('PerformanceScreen')}
-        >
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Performance Summary</Text>
-            <Text style={styles.sectionAction}>View</Text>
-          </View>
-
-          <View style={styles.metricRow}>
-            <View style={styles.metricCard}>
-              <Text style={styles.metricValue}>{profile.completedTrips}</Text>
-              <Text style={styles.metricLabel}>Trips Completed</Text>
-            </View>
-
-            <View style={styles.metricCard}>
-              <Text style={styles.metricValue}>{profile.onTimePercentage}%</Text>
-              <Text style={styles.metricLabel}>On-Time %</Text>
-            </View>
-
-            <View style={styles.metricCard}>
-              <Text style={styles.metricValue}>{Number(profile.rating || 0).toFixed(1)}</Text>
-              <Text style={styles.metricLabel}>Rating</Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-
-        <View style={styles.card}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Document Status</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('DocumentsScreen')}>
-              <Text style={styles.sectionAction}>View All</Text>
+              <AppBadge label={doc.badgeLabel} tone={doc.badgeTone} />
             </TouchableOpacity>
+          ))}
+        </AppCard>
+
+        <AppCard style={{ marginBottom: spacing[1] }}>
+          <Text style={[typography.h2, { color: colors.textPrimary }]}>{t('profile.preferences')}</Text>
+          <View
+            style={{
+              marginTop: spacing[1],
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              minHeight: 48,
+            }}
+          >
+            <Text style={[typography.label, { color: colors.textSecondary }]}>{t('profile.darkMode')}</Text>
+            <Switch
+              value={mode === 'dark'}
+              onValueChange={onToggleTheme}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor={colors.textOnColor}
+            />
           </View>
+        </AppCard>
 
-          {documents.map((doc) => {
-            const status = resolveDocumentStatus(doc.expiryDate);
-            const statusColors = getStatusColors(status);
+        <AppCard style={{ marginBottom: spacing[1] }}>
+          <Text style={[typography.h2, { color: colors.textPrimary }]}>{t('profile.language')}</Text>
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[1] }]}>
+            {t('language.currentLanguage')}: {currentLanguage.nativeLabel}
+          </Text>
+          <AppButton
+            title={t('language.changeLanguage')}
+            variant="secondary"
+            onPress={() => setShowLanguageModal(true)}
+            style={{ marginTop: spacing[1] }}
+          />
+        </AppCard>
 
-            return (
-              <TouchableOpacity
-                key={doc.name}
-                style={styles.documentRow}
-                activeOpacity={0.85}
-                onPress={() =>
-                  navigation.navigate('DocumentUploadScreen', {
-                    documentName: doc.name,
-                    expiryDate: doc.expiryDate,
-                  })
-                }
-              >
-                <View>
-                  <Text style={styles.documentName}>{doc.name}</Text>
-                  <Text style={styles.documentSubtext}>Expiry: {formatDateLabel(doc.expiryDate)}</Text>
-                </View>
-
-                <View style={styles.documentRight}>
-                  <View style={[styles.statusBadge, { borderColor: statusColors.borderColor }]}>
-                    <Text style={[styles.statusText, { color: statusColors.textColor }]}>{status}</Text>
-                  </View>
-                  <Text style={styles.chevron}>›</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Account Options</Text>
-
-          <TouchableOpacity
-            style={styles.optionRow}
-            activeOpacity={0.85}
-            onPress={() => navigation.navigate('BankDetailsScreen')}
-          >
-            <Text style={styles.optionLabel}>Bank Details</Text>
-            <Text style={styles.chevron}>›</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.optionRow}
-            activeOpacity={0.85}
-            onPress={() => navigation.navigate('SettingsScreen')}
-          >
-            <Text style={styles.optionLabel}>Settings</Text>
-            <Text style={styles.chevron}>›</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.optionRow}
-            activeOpacity={0.85}
-            onPress={() => navigation.navigate('SupportCenter')}
-          >
-            <Text style={styles.optionLabel}>Support</Text>
-            <Text style={styles.chevron}>›</Text>
-          </TouchableOpacity>
-        </View>
+        <AppCard style={{ marginBottom: spacing[1] }}>
+          <Text style={[typography.h2, { color: colors.textPrimary }]}>
+            {t('profile.bankDetails')}
+          </Text>
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[1] }]}>
+            {t('profile.bank')}
+          </Text>
+          <Text style={[typography.label, { color: colors.textPrimary }]}>{profile.bankName}</Text>
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[1] }]}>
+            {t('profile.account')}
+          </Text>
+          <Text style={[typography.label, { color: colors.textPrimary }]}>
+            {profile.accountMasked}
+          </Text>
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[1] }]}>
+            {t('profile.ifsc')}
+          </Text>
+          <Text style={[typography.label, { color: colors.textPrimary }]}>{profile.ifsc}</Text>
+        </AppCard>
 
         <TouchableOpacity
-          style={styles.logoutButton}
-          activeOpacity={0.85}
-          onPress={() => setIsLogoutModalVisible(true)}
+          onPress={onConfirmLogout}
+          activeOpacity={0.9}
+          style={{
+            minHeight: 48,
+            borderRadius: 16,
+            backgroundColor: colors.critical,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginTop: spacing[1],
+          }}
         >
-          <Text style={styles.logoutButtonText}>Logout</Text>
+          <Text style={[typography.label, { color: colors.textOnColor }]}>{t('profile.logout')}</Text>
         </TouchableOpacity>
       </ScrollView>
 
       <Modal
         transparent
+        visible={showLanguageModal}
         animationType="fade"
-        visible={isLogoutModalVisible}
-        onRequestClose={() => setIsLogoutModalVisible(false)}
+        onRequestClose={() => setShowLanguageModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Confirm Logout</Text>
-            <Text style={styles.modalMessage}>Do you want to logout from this account?</Text>
-
-            <View style={styles.modalActions}>
-              <Pressable style={styles.cancelButton} onPress={() => setIsLogoutModalVisible(false)}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </Pressable>
-
-              <Pressable style={styles.confirmButton} onPress={onConfirmLogout}>
-                <Text style={styles.confirmButtonText}>Logout</Text>
-              </Pressable>
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            justifyContent: 'center',
+            paddingHorizontal: spacing[2],
+          }}
+        >
+          <AppCard>
+            <Text style={[typography.h2, { color: colors.textPrimary }]}>
+              {t('language.chooseModalTitle')}
+            </Text>
+            <View style={{ marginTop: spacing[1], gap: spacing[1] }}>
+              {supportedLanguages.map(item => {
+                const selected = item.code === language;
+                return (
+                  <TouchableOpacity
+                    key={item.code}
+                    activeOpacity={0.9}
+                    onPress={() => onSelectLanguage(item.code)}
+                    style={{
+                      minHeight: 48,
+                      borderRadius: 16,
+                      borderWidth: 1,
+                      borderColor: selected ? colors.primary : colors.border,
+                      backgroundColor: selected ? colors.primary : colors.surfaceAlt,
+                      justifyContent: 'center',
+                      paddingHorizontal: spacing[2],
+                    }}
+                  >
+                    <Text style={[typography.label, { color: colors.textOnColor }]}>
+                      {item.nativeLabel}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-          </View>
+            <AppButton
+              title={t('common.cancel')}
+              variant="secondary"
+              onPress={() => setShowLanguageModal(false)}
+              style={{ marginTop: spacing[2] }}
+            />
+          </AppCard>
         </View>
       </Modal>
-    </SafeAreaView>
+    </AppScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  contentContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 28,
-    gap: 16,
-  },
-  screenTitle: {
-    marginTop: 8,
-    fontSize: 28,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-  },
-  warningBanner: {
-    borderWidth: 1,
-    borderColor: COLORS.danger,
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    backgroundColor: '#3A1212',
-  },
-  warningBannerText: {
-    color: COLORS.textPrimary,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  card: {
-    backgroundColor: COLORS.card,
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    gap: 14,
-  },
-  driverInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatarPlaceholder: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#374151',
-    borderWidth: 1,
-    borderColor: '#4B5563',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  avatarText: {
-    color: COLORS.textPrimary,
-    fontSize: 24,
-    fontWeight: '700',
-  },
-  driverDetails: {
-    flex: 1,
-    gap: 4,
-  },
-  driverName: {
-    color: COLORS.textPrimary,
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  driverMeta: {
-    color: COLORS.textSecondary,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-    gap: 10,
-  },
-  ratingText: {
-    color: COLORS.textPrimary,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  verifiedBadge: {
-    borderWidth: 1,
-    borderColor: COLORS.success,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    backgroundColor: '#0F2A18',
-  },
-  verifiedBadgeText: {
-    color: COLORS.success,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  sectionTitle: {
-    color: COLORS.textPrimary,
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  sectionAction: {
-    color: COLORS.primary,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  metricRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  metricCard: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#334155',
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    gap: 6,
-  },
-  metricValue: {
-    color: COLORS.textPrimary,
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  metricLabel: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  documentRow: {
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#334155',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  documentName: {
-    color: COLORS.textPrimary,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  documentSubtext: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  documentRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  statusBadge: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    minWidth: 86,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#111827',
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  chevron: {
-    color: COLORS.textSecondary,
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  optionRow: {
-    minHeight: 52,
-    borderTopWidth: 1,
-    borderTopColor: '#334155',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 6,
-  },
-  optionLabel: {
-    color: COLORS.textPrimary,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  logoutButton: {
-    minHeight: 56,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: COLORS.danger,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 4,
-  },
-  logoutButtonText: {
-    color: COLORS.danger,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-  },
-  modalCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 20,
-  },
-  modalTitle: {
-    color: COLORS.textPrimary,
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  modalMessage: {
-    marginTop: 6,
-    color: COLORS.textSecondary,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  modalActions: {
-    marginTop: 20,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 12,
-  },
-  cancelButton: {
-    minHeight: 44,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#4B5563',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cancelButtonText: {
-    color: COLORS.textSecondary,
-    fontWeight: '600',
-  },
-  confirmButton: {
-    minHeight: 44,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: COLORS.danger,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  confirmButtonText: {
-    color: COLORS.textPrimary,
-    fontWeight: '700',
-  },
-});
 
 export default ProfileScreen;

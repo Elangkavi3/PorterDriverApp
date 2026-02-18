@@ -8,8 +8,10 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLanguage } from '../../i18n/LanguageProvider';
 
 function LoginScreen({ navigation }) {
+  const { t } = useLanguage();
   const [mobile, setMobile] = useState('');
   const isValidMobile = useMemo(() => mobile.length === 10, [mobile]);
 
@@ -20,7 +22,7 @@ function LoginScreen({ navigation }) {
 
   const handleSendOtp = () => {
     if (!isValidMobile) {
-      Alert.alert('Invalid number', 'Enter a valid 10-digit mobile number.');
+      Alert.alert(t('auth.invalidNumberTitle'), t('auth.invalidNumberMessage'));
       return;
     }
 
@@ -30,8 +32,9 @@ function LoginScreen({ navigation }) {
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
       <View style={styles.container}>
-        <Text style={styles.title}>Login</Text>
-        <Text style={styles.subtitle}>Enter mobile number to receive OTP</Text>
+        <Text style={styles.brand}>{t('brand.appName')}</Text>
+        <Text style={styles.title}>{t('auth.driverLoginTitle')}</Text>
+        <Text style={styles.subtitle}>{t('auth.enterMobile')}</Text>
 
         <View style={styles.inputWrap}>
           <Text style={styles.prefix}>+91</Text>
@@ -40,7 +43,7 @@ function LoginScreen({ navigation }) {
             onChangeText={handleMobileChange}
             keyboardType="number-pad"
             maxLength={10}
-            placeholder="Mobile Number"
+            placeholder={t('auth.mobilePlaceholder')}
             placeholderTextColor="#6B7280"
             style={styles.input}
           />
@@ -52,7 +55,7 @@ function LoginScreen({ navigation }) {
           onPress={handleSendOtp}
           disabled={!isValidMobile}
         >
-          <Text style={styles.primaryButtonText}>Send OTP</Text>
+          <Text style={styles.primaryButtonText}>{t('auth.sendOtp')}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -70,9 +73,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   title: {
+    marginTop: 8,
     color: '#FFFFFF',
     fontSize: 28,
     fontWeight: '800',
+  },
+  brand: {
+    color: '#9CA3AF',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.4,
   },
   subtitle: {
     marginTop: 8,

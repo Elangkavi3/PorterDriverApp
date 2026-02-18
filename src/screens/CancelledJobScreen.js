@@ -118,7 +118,7 @@ function CancelledJobScreen({ navigation, route }) {
         <TouchableOpacity
           activeOpacity={0.9}
           style={styles.returnButton}
-          onPress={() => navigation.navigate('JobsScreen')}
+          onPress={() => navigation.navigate('JobsMain')}
         >
           <Text style={styles.returnButtonText}>Return to Jobs</Text>
         </TouchableOpacity>

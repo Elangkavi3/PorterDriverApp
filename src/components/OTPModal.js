@@ -1,17 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import {
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { BODY, CAPTION, H2 } from '../constants/typography';
-import buttonStyles from '../styles/buttonStyles';
+import { Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useAppTheme } from '../theme/ThemeProvider';
 
 function OTPModal({ visible, title, onClose, onConfirm }) {
+  const { colors, spacing, radius, typography } = useAppTheme();
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
 
@@ -37,8 +29,19 @@ function OTPModal({ visible, title, onClose, onConfirm }) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={closeModal}>
       <Pressable style={styles.backdrop} onPress={closeModal}>
-        <Pressable style={styles.card} onPress={() => {}}>
-          <Text style={styles.title}>{title}</Text>
+        <Pressable
+          style={[
+            styles.card,
+            {
+              borderRadius: radius.card,
+              borderColor: colors.border,
+              backgroundColor: colors.surface,
+              padding: spacing[2],
+            },
+          ]}
+          onPress={() => {}}
+        >
+          <Text style={[typography.h2, { color: colors.textPrimary, marginBottom: spacing[1] }]}>{title}</Text>
           <TextInput
             value={otp}
             onChangeText={text => {
@@ -48,17 +51,44 @@ function OTPModal({ visible, title, onClose, onConfirm }) {
             maxLength={6}
             keyboardType="number-pad"
             placeholder="6-digit OTP"
-            placeholderTextColor="#9CA3AF"
-            style={styles.input}
+            placeholderTextColor={colors.textSecondary}
+            style={[
+              styles.input,
+              {
+                minHeight: spacing[6],
+                borderRadius: radius.card,
+                borderColor: colors.border,
+                backgroundColor: colors.surfaceAlt,
+                color: colors.textPrimary,
+                paddingHorizontal: spacing[2],
+              },
+            ]}
           />
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error ? <Text style={[typography.caption, { marginTop: spacing[1], color: colors.critical }]}>{error}</Text> : null}
 
-          <View style={styles.actionRow}>
-            <TouchableOpacity style={styles.cancelButton} onPress={closeModal}>
-              <Text style={styles.cancelText}>Cancel</Text>
+          <View style={[styles.actionRow, { gap: spacing[1], marginTop: spacing[2] }]}> 
+            <TouchableOpacity
+              style={[
+                styles.cancelButton,
+                {
+                  minHeight: spacing[6],
+                  borderRadius: radius.card,
+                  borderColor: colors.border,
+                  backgroundColor: colors.surfaceAlt,
+                },
+              ]}
+              onPress={closeModal}
+            >
+              <Text style={[typography.body, { color: colors.textPrimary }]}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[buttonStyles.primaryButton, styles.confirmButton]} onPress={handleConfirm}>
-              <Text style={buttonStyles.primaryButtonText}>Confirm</Text>
+            <TouchableOpacity
+              style={[
+                styles.confirmButton,
+                { minHeight: spacing[6], borderRadius: radius.card, backgroundColor: colors.primary },
+              ]}
+              onPress={handleConfirm}
+            >
+              <Text style={[typography.body, { color: '#FFFFFF' }]}>Confirm</Text>
             </TouchableOpacity>
           </View>
         </Pressable>
@@ -77,59 +107,25 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '100%',
-    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#374151',
-    backgroundColor: '#111827',
-    padding: 16,
-  },
-  title: {
-    color: '#FFFFFF',
-    fontSize: H2,
-    fontWeight: '800',
-    marginBottom: 8,
   },
   input: {
-    minHeight: 56,
-    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#4B5563',
-    backgroundColor: '#1F2937',
-    color: '#FFFFFF',
-    fontSize: BODY,
-    paddingHorizontal: 16,
     letterSpacing: 4,
-  },
-  error: {
-    marginTop: 8,
-    color: '#DC2626',
-    fontSize: CAPTION,
-    fontWeight: '700',
   },
   actionRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 16,
   },
   cancelButton: {
     flex: 1,
-    minHeight: 56,
-    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#4B5563',
-    backgroundColor: '#1F2937',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cancelText: {
-    color: '#FFFFFF',
-    fontSize: BODY,
-    fontWeight: '700',
-  },
   confirmButton: {
     flex: 1,
-    minHeight: 56,
-    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

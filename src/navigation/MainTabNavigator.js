@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -6,6 +6,9 @@ import HomeScreen from '../screens/HomeScreen';
 import JobDetailScreen from '../screens/JobDetailScreen';
 import ActiveTripScreen from '../screens/ActiveTripScreen';
 import VehicleInspectionScreen from '../screens/VehicleInspectionScreen';
+import VehicleDetailsScreen from '../screens/VehicleDetailsScreen';
+import NotFitForDutyScreen from '../screens/NotFitForDutyScreen';
+import VehicleUnsafeScreen from '../screens/VehicleUnsafeScreen';
 import DailyPreDutyHealthScreen from '../screens/DailyPreDutyHealthScreen';
 import PickupOTPScreen from '../screens/PickupOTPScreen';
 import DeliveryOTPScreen from '../screens/DeliveryOTPScreen';
@@ -18,9 +21,6 @@ import SettingsScreen from '../screens/SettingsScreen';
 import JobsScreen from '../screens/JobsScreen';
 import CompletedJobScreen from '../screens/CompletedJobScreen';
 import CancelledJobScreen from '../screens/CancelledJobScreen';
-import WalletScreen from '../screens/WalletScreen';
-import WithdrawScreen from '../screens/WithdrawScreen';
-import TransactionDetailScreen from '../screens/TransactionDetailScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import PerformanceScreen from '../screens/PerformanceScreen';
 import DocumentsScreen from '../screens/DocumentsScreen';
@@ -28,41 +28,46 @@ import DocumentUploadScreen from '../screens/DocumentUploadScreen';
 import BankDetailsScreen from '../screens/BankDetailsScreen';
 import HomeIcon from '../assets/icons/HomeIcon.svg';
 import CartIcon from '../assets/icons/CartIcon.svg';
-import WalletIcon from '../assets/icons/WalletIcon.svg';
 import DashboardIcon from '../assets/icons/DashboardIcon.svg';
+import MenuIcon from '../assets/icons/MenuIcon.svg';
+import { useAppTheme } from '../theme/ThemeProvider';
+import { useLanguage } from '../i18n/LanguageProvider';
 
 const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
 const JobsStack = createNativeStackNavigator();
+const SupportStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
-const WalletStack = createNativeStackNavigator();
 
 const TAB_ICONS = {
   Home: HomeIcon,
   Jobs: CartIcon,
-  Wallet: WalletIcon,
+  Support: MenuIcon,
   Profile: DashboardIcon,
 };
 
-function renderTabIcon(routeName) {
-  return ({ color, size }) => {
-    const Icon = TAB_ICONS[routeName];
-    if (!Icon) {
-      return null;
-    }
-
-    const iconSize = size && size > 0 ? size : 22;
-    return <Icon width={iconSize} height={iconSize} color={color} />;
-  };
+function TabBarIcon({ routeName, color, size }) {
+  const iconSize = size && size > 0 ? size : 22;
+  const Icon = TAB_ICONS[routeName];
+  if (!Icon) {
+    return null;
+  }
+  return <Icon width={iconSize} height={iconSize} color={color} />;
 }
 
-function HomeStackNavigator() {
+function HomeStackNavigator({ route }) {
+  const requestedRoute = route?.params?.initialRouteName;
+  const initialRouteName = requestedRoute === 'ActiveTrip' ? 'ActiveTrip' : 'HomeMain';
+
   return (
-    <HomeStack.Navigator screenOptions={{ headerShown: false }}>
+    <HomeStack.Navigator initialRouteName={initialRouteName} screenOptions={{ headerShown: false }}>
       <HomeStack.Screen name="HomeMain" component={HomeScreen} />
       <HomeStack.Screen name="JobDetail" component={JobDetailScreen} />
       <HomeStack.Screen name="ActiveTrip" component={ActiveTripScreen} />
       <HomeStack.Screen name="VehicleInspection" component={VehicleInspectionScreen} />
+      <HomeStack.Screen name="VehicleDetails" component={VehicleDetailsScreen} />
+      <HomeStack.Screen name="NotFitForDuty" component={NotFitForDutyScreen} />
+      <HomeStack.Screen name="VehicleUnsafe" component={VehicleUnsafeScreen} />
       <HomeStack.Screen name="DailyPreDutyHealth" component={DailyPreDutyHealthScreen} />
       <HomeStack.Screen name="PickupOTP" component={PickupOTPScreen} />
       <HomeStack.Screen name="DeliveryOTP" component={DeliveryOTPScreen} />
@@ -72,105 +77,94 @@ function HomeStackNavigator() {
       <HomeStack.Screen name="RaiseTicket" component={RaiseTicketScreen} />
       <HomeStack.Screen name="SOSFullScreen" component={SOSFullScreen} />
       <HomeStack.Screen name="Settings" component={SettingsScreen} />
-      <HomeStack.Screen name="Withdrawal" component={WithdrawScreen} />
     </HomeStack.Navigator>
-  );
-}
-
-function WalletStackNavigator() {
-  return (
-    <WalletStack.Navigator screenOptions={{ headerShown: false }}>
-      <WalletStack.Screen name="WalletScreen" component={WalletScreen} />
-      <WalletStack.Screen name="WithdrawScreen" component={WithdrawScreen} />
-      <WalletStack.Screen
-        name="TransactionDetailScreen"
-        component={TransactionDetailScreen}
-      />
-    </WalletStack.Navigator>
   );
 }
 
 function JobsStackNavigator() {
   return (
     <JobsStack.Navigator screenOptions={{ headerShown: false }}>
-      <JobsStack.Screen name="JobsScreen" component={JobsScreen} />
+      <JobsStack.Screen name="JobsMain" component={JobsScreen} />
       <JobsStack.Screen name="JobDetailScreen" component={JobDetailScreen} />
       <JobsStack.Screen name="CompletedJobScreen" component={CompletedJobScreen} />
       <JobsStack.Screen name="CancelledJobScreen" component={CancelledJobScreen} />
-      <JobsStack.Screen name="ActiveTripScreen" component={ActiveTripScreen} />
+      <JobsStack.Screen name="VehicleInspection" component={VehicleInspectionScreen} />
+      <JobsStack.Screen name="ActiveTrip" component={ActiveTripScreen} />
       <JobsStack.Screen name="SOSFullScreen" component={SOSFullScreen} />
     </JobsStack.Navigator>
+  );
+}
+
+function SupportStackNavigator() {
+  return (
+    <SupportStack.Navigator screenOptions={{ headerShown: false }}>
+      <SupportStack.Screen name="SupportMain" component={SupportCenterScreen} />
+      <SupportStack.Screen name="RaiseTicket" component={RaiseTicketScreen} />
+      <SupportStack.Screen name="SOSFullScreen" component={SOSFullScreen} />
+    </SupportStack.Navigator>
   );
 }
 
 function ProfileStackNavigator() {
   return (
     <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
-      <ProfileStack.Screen name="ProfileScreen" component={ProfileScreen} />
+      <ProfileStack.Screen name="ProfileMain" component={ProfileScreen} />
       <ProfileStack.Screen name="PerformanceScreen" component={PerformanceScreen} />
       <ProfileStack.Screen name="DocumentsScreen" component={DocumentsScreen} />
       <ProfileStack.Screen name="DocumentUploadScreen" component={DocumentUploadScreen} />
       <ProfileStack.Screen name="BankDetailsScreen" component={BankDetailsScreen} />
+      <ProfileStack.Screen name="VehicleDetailsScreen" component={VehicleDetailsScreen} />
       <ProfileStack.Screen name="SettingsScreen" component={SettingsScreen} />
       <ProfileStack.Screen name="SupportCenter" component={SupportCenterScreen} />
     </ProfileStack.Navigator>
   );
 }
 
-function MainTabNavigator() {
+function MainTabNavigator({ route }) {
+  const { colors, spacing, typography } = useAppTheme();
+  const { t } = useLanguage();
+  const homeInitialRoute = route?.params?.homeInitialRoute === 'ActiveTrip' ? 'ActiveTrip' : 'HomeMain';
+
   return (
     <Tab.Navigator
-      screenOptions={{
+      screenOptions={({ route: screenRoute }) => ({
         headerShown: false,
-        tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: '#2563EB',
-        tabBarInactiveTintColor: '#9CA3AF',
-        tabBarLabelStyle: styles.tabLabel,
-      }}
+        tabBarStyle: [
+          styles.tabBar,
+          {
+            backgroundColor: colors.surface,
+            borderTopColor: colors.border,
+            height: spacing[6] + spacing[3],
+            paddingVertical: spacing[1],
+          },
+        ],
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textSecondary,
+        tabBarLabelStyle: [styles.tabLabel, typography.caption],
+        tabBarIcon: ({ color, size }) => (
+          <TabBarIcon routeName={screenRoute.name} color={color} size={size} />
+        ),
+      })}
     >
       <Tab.Screen
         name="Home"
         component={HomeStackNavigator}
-        options={{
-          tabBarIcon: renderTabIcon('Home'),
-        }}
+        initialParams={{ initialRouteName: homeInitialRoute }}
+        options={{ tabBarLabel: t('tabs.home') }}
       />
-      <Tab.Screen
-        name="Jobs"
-        component={JobsStackNavigator}
-        options={{
-          tabBarIcon: renderTabIcon('Jobs'),
-        }}
-      />
-      <Tab.Screen
-        name="Wallet"
-        component={WalletStackNavigator}
-        options={{
-          tabBarIcon: renderTabIcon('Wallet'),
-        }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileStackNavigator}
-        options={{
-          tabBarIcon: renderTabIcon('Profile'),
-        }}
-      />
+      <Tab.Screen name="Jobs" component={JobsStackNavigator} options={{ tabBarLabel: t('tabs.jobs') }} />
+      <Tab.Screen name="Support" component={SupportStackNavigator} options={{ tabBarLabel: t('tabs.support') }} />
+      <Tab.Screen name="Profile" component={ProfileStackNavigator} options={{ tabBarLabel: t('tabs.profile') }} />
     </Tab.Navigator>
   );
 }
 
 const styles = StyleSheet.create({
   tabBar: {
-    height: 72,
-    paddingTop: 8,
-    paddingBottom: 8,
-    backgroundColor: '#1F2937',
-    borderTopColor: '#374151',
+    borderTopWidth: 1,
   },
   tabLabel: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });
 
