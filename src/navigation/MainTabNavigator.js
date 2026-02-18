@@ -26,6 +26,7 @@ import PerformanceScreen from '../screens/PerformanceScreen';
 import DocumentsScreen from '../screens/DocumentsScreen';
 import DocumentUploadScreen from '../screens/DocumentUploadScreen';
 import BankDetailsScreen from '../screens/BankDetailsScreen';
+import RoutePreferencesScreen from '../screens/RoutePreferencesScreen';
 import HomeIcon from '../assets/icons/HomeIcon.svg';
 import CartIcon from '../assets/icons/CartIcon.svg';
 import DashboardIcon from '../assets/icons/DashboardIcon.svg';
@@ -129,6 +130,7 @@ function ProfileStackNavigator() {
       <ProfileStack.Screen name="DocumentsScreen" component={DocumentsScreen} />
       <ProfileStack.Screen name="DocumentUploadScreen" component={DocumentUploadScreen} />
       <ProfileStack.Screen name="BankDetailsScreen" component={BankDetailsScreen} />
+      <ProfileStack.Screen name="RoutePreferencesScreen" component={RoutePreferencesScreen} />
       <ProfileStack.Screen name="VehicleDetailsScreen" component={VehicleDetailsScreen} />
       <ProfileStack.Screen name="SettingsScreen" component={SettingsScreen} />
       <ProfileStack.Screen name="SupportCenter" component={SupportCenterScreen} />

@@ -18,12 +18,19 @@ import {
   getVehicleStatusTone,
   normalizeVehicleStatus,
 } from '../services/vehicleStatus';
+import {
+  buildRoutePreferencesSummary,
+  getDefaultRoutePreferences,
+  getRoutePreferencesStorageKey,
+  normalizeRoutePreferences,
+} from '../services/routePreferences';
 
 const STORAGE_KEYS = {
   profile: 'driverProfile',
   documents: 'driverDocuments',
   settings: 'driverSettings',
   vehicleSafetyStatus: 'vehicleSafetyStatus',
+  routePreferences: getRoutePreferencesStorageKey(),
 };
 
 const MOCK_PROFILE = {
@@ -62,6 +69,7 @@ function ProfileScreen({ navigation }) {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [vehicleStatus, setVehicleStatus] = useState('INSPECTION_PENDING');
   const [showLanguageModal, setShowLanguageModal] = useState(false);
+  const [routePreferences, setRoutePreferences] = useState(getDefaultRoutePreferences());
 
   const hydrateProfileData = useCallback(async () => {
     try {
@@ -70,6 +78,7 @@ function ProfileScreen({ navigation }) {
         STORAGE_KEYS.documents,
         STORAGE_KEYS.settings,
         STORAGE_KEYS.vehicleSafetyStatus,
+        STORAGE_KEYS.routePreferences,
       ]);
 
       const dataMap = Object.fromEntries(stored);
@@ -108,6 +117,10 @@ function ProfileScreen({ navigation }) {
         language: settingsData.language || 'English',
       });
       setVehicleStatus(normalizeVehicleStatus(dataMap[STORAGE_KEYS.vehicleSafetyStatus]));
+      const normalizedRoutePreferences = normalizeRoutePreferences(
+        parseJSON(dataMap[STORAGE_KEYS.routePreferences], null),
+      );
+      setRoutePreferences(normalizedRoutePreferences);
     } catch (_error) {
       Alert.alert(t('alerts.tripBlocked'), t('profile.loadError'));
     }
@@ -134,6 +147,10 @@ function ProfileScreen({ navigation }) {
     }
     return documentSummary.documents;
   }, [documentSummary.documents, profile?.vehicleRcApplicable]);
+  const routePreferenceSummary = useMemo(
+    () => buildRoutePreferencesSummary(routePreferences, t),
+    [routePreferences, t],
+  );
 
   const updateSettings = useCallback(async next => {
     setSettings(next);
@@ -285,6 +302,30 @@ function ProfileScreen({ navigation }) {
               <AppBadge label={doc.badgeLabel} tone={doc.badgeTone} />
             </TouchableOpacity>
           ))}
+        </AppCard>
+
+        <AppCard style={{ marginBottom: spacing[1] }}>
+          <TouchableOpacity
+            activeOpacity={0.88}
+            onPress={() => navigation.navigate('RoutePreferencesScreen')}
+            style={{ minHeight: 48, justifyContent: 'center' }}
+          >
+            <Text style={[typography.h2, { color: colors.textPrimary }]}>
+              {t('routePreferences.summaryTitle')}
+            </Text>
+            <Text
+              style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[1] }]}
+            >
+              {t('routePreferences.summaryRegions', { regions: routePreferenceSummary.regions })}
+            </Text>
+            <Text
+              style={[typography.caption, { color: colors.textSecondary, marginTop: spacing[0] }]}
+            >
+              {t('routePreferences.summaryRouteType', {
+                routeType: routePreferenceSummary.routeType,
+              })}
+            </Text>
+          </TouchableOpacity>
         </AppCard>
 
         <AppCard style={{ marginBottom: spacing[1] }}>
