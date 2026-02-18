@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, Text, TouchableOpacity, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AppScreen from '../components/ui/AppScreen';
 import AppCard from '../components/ui/AppCard';

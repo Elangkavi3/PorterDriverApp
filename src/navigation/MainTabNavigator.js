@@ -55,6 +55,22 @@ function TabBarIcon({ routeName, color, size }) {
   return <Icon width={iconSize} height={iconSize} color={color} />;
 }
 
+function HomeTabBarIcon(props) {
+  return <TabBarIcon routeName="Home" {...props} />;
+}
+
+function JobsTabBarIcon(props) {
+  return <TabBarIcon routeName="Jobs" {...props} />;
+}
+
+function SupportTabBarIcon(props) {
+  return <TabBarIcon routeName="Support" {...props} />;
+}
+
+function ProfileTabBarIcon(props) {
+  return <TabBarIcon routeName="Profile" {...props} />;
+}
+
 function HomeStackNavigator({ route }) {
   const requestedRoute = route?.params?.initialRouteName;
   const initialRouteName = requestedRoute === 'ActiveTrip' ? 'ActiveTrip' : 'HomeMain';
@@ -127,7 +143,7 @@ function MainTabNavigator({ route }) {
 
   return (
     <Tab.Navigator
-      screenOptions={({ route: screenRoute }) => ({
+      screenOptions={{
         headerShown: false,
         tabBarStyle: [
           styles.tabBar,
@@ -141,20 +157,29 @@ function MainTabNavigator({ route }) {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textSecondary,
         tabBarLabelStyle: [styles.tabLabel, typography.caption],
-        tabBarIcon: ({ color, size }) => (
-          <TabBarIcon routeName={screenRoute.name} color={color} size={size} />
-        ),
-      })}
+      }}
     >
       <Tab.Screen
         name="Home"
         component={HomeStackNavigator}
         initialParams={{ initialRouteName: homeInitialRoute }}
-        options={{ tabBarLabel: t('tabs.home') }}
+        options={{ tabBarLabel: t('tabs.home'), tabBarIcon: HomeTabBarIcon }}
       />
-      <Tab.Screen name="Jobs" component={JobsStackNavigator} options={{ tabBarLabel: t('tabs.jobs') }} />
-      <Tab.Screen name="Support" component={SupportStackNavigator} options={{ tabBarLabel: t('tabs.support') }} />
-      <Tab.Screen name="Profile" component={ProfileStackNavigator} options={{ tabBarLabel: t('tabs.profile') }} />
+      <Tab.Screen
+        name="Jobs"
+        component={JobsStackNavigator}
+        options={{ tabBarLabel: t('tabs.jobs'), tabBarIcon: JobsTabBarIcon }}
+      />
+      <Tab.Screen
+        name="Support"
+        component={SupportStackNavigator}
+        options={{ tabBarLabel: t('tabs.support'), tabBarIcon: SupportTabBarIcon }}
+      />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileStackNavigator}
+        options={{ tabBarLabel: t('tabs.profile'), tabBarIcon: ProfileTabBarIcon }}
+      />
     </Tab.Navigator>
   );
 }
